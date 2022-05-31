@@ -50,6 +50,7 @@ mod run;
 mod subst;
 mod unionfind;
 mod util;
+mod rw_rules;
 
 /// A key to identify [`EClass`]es within an
 /// [`EGraph`].
@@ -97,6 +98,7 @@ pub use {
     run::*,
     subst::{Subst, Var},
     util::*,
+    rw_rules::*,
 };
 
 #[cfg(feature = "lp")]
