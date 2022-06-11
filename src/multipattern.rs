@@ -1,5 +1,6 @@
 use std::str::FromStr;
 use thiserror::Error;
+use std::borrow::Cow;
 
 use crate::*;
 
@@ -101,15 +102,22 @@ impl<L: Language + FromOp> FromStr for MultiPattern<L> {
 }
 
 impl<L: Language, A: Analysis<L>> Searcher<L, A> for MultiPattern<L> {
+
+    fn get_pattern_ast(&self) -> Option<&PatternAst<L>> {
+        let (_var,ast_aux) = &self.asts[0];
+        Some(ast_aux)
+    }
     fn search_eclass(&self, egraph: &EGraph<L, A>, eclass: Id) -> Option<SearchMatches<L>> {
         let substs = self.program.run(egraph, eclass);
         if substs.is_empty() {
             None
         } else {
+            let (_var,ast_aux) = &self.asts[0];
+            let ast = Some(Cow::Borrowed(ast_aux));
             Some(SearchMatches {
                 eclass,
                 substs,
-                ast: None,
+                ast,
             })
         }
     }

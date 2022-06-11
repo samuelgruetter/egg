@@ -326,6 +326,20 @@ macro_rules! multi_rewrite {
 
 #[doc(hidden)]
 #[macro_export]
+macro_rules! coq_rewrite {
+    (
+        $name:expr;
+        $lhs:tt => $rhs:tt
+    )  => {{
+        let searcher = $crate::__rewrite!(@parse MultiPattern $lhs);
+        let core_applier = $crate::__rewrite!(@parse Pattern $rhs);
+        let applier = $crate::__rewrite!(@applier core_applier;);
+        $crate::Rewrite::new($name.to_string(), searcher, applier).unwrap()
+    }};
+}
+
+#[doc(hidden)]
+#[macro_export]
 macro_rules! __rewrite {
     (@parse $t:ident $rhs:literal) => {
         $rhs.parse::<$crate::$t<_>>().unwrap()
