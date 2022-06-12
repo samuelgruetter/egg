@@ -394,6 +394,20 @@ where
         self
     }
 
+    /// Add expressions to the egraph to be run.
+    ///
+    /// The eclass id of these additions will be recorded in the
+    /// [`roots`](Runner::roots) field, ordered by
+    /// insertion order.
+    pub fn with_exprs(mut self, exprs: Vec<&RecExpr<L>>) -> Self {
+        for expr in exprs {
+            let id = self.egraph.add_expr(expr);
+            self.roots.push(id);
+        }
+        self
+    }
+
+
     /// Replace the [`EGraph`] of this `Runner`.
     pub fn with_egraph(self, egraph: EGraph<L, N>) -> Self {
         Self { egraph, ..self }
