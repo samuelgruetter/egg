@@ -2,8 +2,8 @@ use egg::*;
 use symbolic_expressions::*;
 
 fn main() {
-    //    run_simplifier(simplify,prove);
-    run_simplifier(simplify);
+    run_simplifier(simplify, prove);
+    // run_simplifier(simplify);
     // simplify("(wadd x y)");
 }
 
@@ -95,18 +95,27 @@ fn holify(e: &Sexp) -> (Sexp, bool, Sexp, Sexp) {
         }
     }
 }
+
+
 /// parse an expression, simplify it using egg, and pretty print it back out
 #[allow(dead_code)]
-fn simplify(s: &str) -> () {
+fn simplify(s: &str, extra_exprs: Vec<&str>) -> () {
     // parse the expression, the type annotation tells it which Language to use
     let expr: RecExpr<CoqSimpleLanguage> = s.parse().unwrap();
     // let expr: RecExpr<SymbolLang> = s.parse().unwrap();
+
+    let extra_exprs_parsed : Vec<RecExpr<CoqSimpleLanguage>> = extra_exprs.iter().map(|s| s.parse::<RecExpr<CoqSimpleLanguage>>().unwrap()).collect();
+    let mut extra_exprs_parsed2 : Vec<&RecExpr<CoqSimpleLanguage>> = vec![];
+    for i in 0..extra_exprs_parsed.len() {
+        extra_exprs_parsed2.push(&extra_exprs_parsed[i]);
+    }
 
     // simplify the expression using a Runner, which creates an e-graph with
     // the given expression and runs the given rules over it
     let mut runner = Runner::default()
         .with_explanations_enabled()
         .with_expr(&expr)
+        .with_exprs(extra_exprs_parsed2)
         .run(&make_rules());
     // the Runner knows which e-class the expression given with `with_expr` is in
     let root = runner.roots[0];
@@ -128,18 +137,25 @@ fn simplify(s: &str) -> () {
 }
 
 #[allow(dead_code)]
-fn prove(s_l: &str, s_r: &str) -> () {
+fn prove(s_l: &str, s_r: &str, extra_exprs: Vec<&str>) -> () {
     // parse the expression, the type annotation tells it which Language to use
     let expr_l: RecExpr<CoqSimpleLanguage> = s_l.parse().unwrap();
     // let expr_l: RecExpr<SymbolLang> = s_l.parse().unwrap();
     let expr_r: RecExpr<CoqSimpleLanguage> = s_r.parse().unwrap();
     // let expr_r: RecExpr<SymbolLang> = s_r.parse().unwrap();
 
+    let extra_exprs_parsed : Vec<RecExpr<CoqSimpleLanguage>> = extra_exprs.iter().map(|s| s.parse::<RecExpr<CoqSimpleLanguage>>().unwrap()).collect();
+    let mut extra_exprs_parsed2 : Vec<&RecExpr<CoqSimpleLanguage>> = vec![];
+    for i in 0..extra_exprs_parsed.len() {
+        extra_exprs_parsed2.push(&extra_exprs_parsed[i]);
+    }
+
     // simplify the expression using a Runner, which creates an e-graph with
     // the given expression and runs the given rules over it
     let mut runner = Runner::default()
         .with_explanations_enabled()
         .with_expr(&expr_l)
+        .with_exprs(extra_exprs_parsed2)
         .run(&make_rules());
     // the Runner knows which e-class the expression given with `with_expr` is in
     let equivs = runner.egraph.equivs(&expr_l, &expr_r);

@@ -26,46 +26,86 @@ define_language! {
 }
 
 pub fn make_rules() -> Vec<Rewrite<CoqSimpleLanguage, ()>> {
-  let v : Vec<Rewrite<CoqSimpleLanguage, ()>> = vec![
+  let mut v : Vec<Rewrite<CoqSimpleLanguage, ()>> = vec![
+    // universally quantified <=>
+    rewrite!("wadd_assoc"; "(wadd ?a (wadd ?b ?c))" <=> "(wadd (wadd ?a ?b) ?c)"),
+
+    // equalities
+    rewrite!("H"; "(unsigned (wsub x2 x1))" <=> "(Z.mul 8 (Z.of_nat (length word x)))"),
+    rewrite!("H0"; "(eq Z (unsigned (wsub x2 x1)) 0)" <=> "False"),
+    rewrite!("C1"; "(and (Z.le 0 8) (Z.lt 8 (Z.pow 2 32)))" <=> "True"),
+    rewrite!("C2"; "(and (Z.le 0 3) (Z.lt 3 32))" <=> "True"),
+    rewrite!("C3"; "(and (Z.le 0 4) (Z.lt 4 32))" <=> "True"),
+    rewrite!("C4"; "(Z.le 0 (Z.pow 2 3))" <=> "True"),
+    rewrite!("C5"; "(Z.lt 0 (Z.pow 2 4))" <=> "True"),
+    rewrite!("C6"; "(Z.lt 0 (Z.pow 2 32))" <=> "True"),
+    rewrite!("C7"; "(Z.lt 0 (Z.pow 2 3))" <=> "True"),
+    rewrite!("C8"; "(Z.lt (Z.pow 2 3) (Z.pow 2 4))" <=> "True"),
+  ].concat();
+
+  v.extend(vec![
+    // universally quantified =>
     rewrite!("wadd_0_l"; "(wadd (ZToWord 0) ?a)" => "?a"),
     rewrite!("wadd_0_r"; "(wadd ?a (ZToWord 0))" => "?a"),
     rewrite!("wadd_comm"; "(wadd ?a ?b)" => "(wadd ?b ?a)"),
-    rewrite!("wadd_assoc"; "(wadd ?a (wadd ?b ?c))" => "(wadd (wadd ?a ?b) ?c)"),
     rewrite!("wadd_opp"; "(wadd ?a (wopp ?a))" => "(ZToWord 0)"),
     rewrite!("wsub_def"; "(wsub ?a ?b)" => "(wadd ?a (wopp ?b))"),
     rewrite!("unsigned_nonneg"; "(Z.le 0 (unsigned ?x))" => "True"),
     rewrite!("word_sub_add_l_same_l"; "(wsub (wadd ?x ?y) ?x)" => "?y"),
-    rewrite!("H"; "(unsigned (wsub x2 x1))" => "(Z.mul 8 (Z.of_nat (length word x)))"),
-    rewrite!("H0"; "(eq Z (unsigned (wsub x2 x1)) 0)" => "False"),
-    rewrite!("C1"; "(and (Z.le 0 8) (Z.lt 8 (Z.pow 2 32)))" => "True"),
-    rewrite!("C2"; "(and (Z.le 0 3) (Z.lt 3 32))" => "True"),
-    rewrite!("C3"; "(and (Z.le 0 4) (Z.lt 4 32))" => "True"),
-    rewrite!("C4"; "(Z.le 0 (Z.pow 2 3))" => "True"),
-    rewrite!("C5"; "(Z.lt 0 (Z.pow 2 4))" => "True"),
-    rewrite!("C6"; "(Z.lt 0 (Z.pow 2 32))" => "True"),
-    rewrite!("C7"; "(Z.lt 0 (Z.pow 2 3))" => "True"),
-    rewrite!("C8"; "(Z.lt (Z.pow 2 3) (Z.pow 2 4))" => "True"),
+    rewrite!("H_eq_eq_sym"; "(eq ?A ?x ?y)" => "(eq ?A ?y ?x)"),
 
-    // manual
+    coq_rewrite!("unsigned_nonneg_triggering_more";
+       "?trigger = (unsigned ?x), ?lhs = True"
+       => "(Z.le 0 (unsigned ?x))"),
+
+    // with sideconditions
     coq_rewrite!("unsigned_of_Z"; 
       "?hyp1 = (and (Z.le 0 ?a) (Z.lt ?a (Z.pow 2 32))) = True, ?lhs = (unsigned (ZToWord ?a))"
        => "?a"),
-
     coq_rewrite!("unsigned_sru_to_div_pow2"; 
       "?hyp1 = (and (Z.le 0 ?a) (Z.lt ?a 32)) = True, ?lhs = (unsigned (wsru ?x (ZToWord ?a)))"
-       => "(Z.div (unsigned ?x) (Z.pow 2 ?a))"),
-    
+       => "(Z.div (unsigned ?x) (Z.pow 2 ?a))"),   
     coq_rewrite!("unsigned_slu_to_mul_pow2"; 
       "?hyp1 = (and (Z.le 0 ?a) (Z.lt ?a 32)) = True, ?lhs = (unsigned (wslu ?x (ZToWord ?a)))"
       => "(Z.modulo (Z.mul (unsigned ?x) (Z.pow 2 ?a)) (Z.pow 2 32))"),
- 
-  ];
+
+    coq_rewrite!("ZT_forget_mod_in_lt_l";
+      "?hyps = (Z.le 0 ?a) = (Z.lt 0 ?m) = (Z.lt ?a ?b) = True, ?lhs = (Z.lt (Z.modulo ?a ?m) ?b)"
+      => "True"),
+    coq_rewrite!("ZT_mul_le"; 
+      "?hyps = (Z.le 0 ?e1) = (Z.le 0 ?e2) = True, ?trigger = (Z.mul ?e1 ?e2), ?lhs = True"
+      => "(Z.le 0 (Z.mul ?e1 ?e2))"),
+    coq_rewrite!("ZT_div_pos"; 
+      "?hyps = (Z.le 0 ?a) = (Z.lt 0 ?b) = True, ?trigger = (Z.div ?a ?b), ?lhs = True"
+      => "(Z.le 0 (Z.div ?a ?b))"),
+    coq_rewrite!("ZT_div_mul_lt"; 
+      "?hyps = (Z.lt 0 ?x) = (Z.lt 0 ?d1) = (Z.lt ?d1 ?d2) = True, ?trigger = (Z.mul (Z.div ?x ?d2) ?d1), ?lhs = True"
+       => "(Z.lt (Z.mul (Z.div ?x ?d2) ?d1) ?x)"),
+    coq_rewrite!("ZT_lt_from_le_and_neq"; 
+      "?hyp1 = (Z.le ?x ?y) = True, ?hyp2 = (eq Z ?x ?y) = False, ?lhs = True"
+       => "(Z.lt ?x ?y)"),
+   ]);
   v
 }
 
-pub fn run_simplifier(f : fn(&str) -> ()) {
+#[allow(unused_variables)]
+pub fn run_simplifier(f_simplify : fn(&str, Vec<&str>) -> (), f_prove : fn(&str, &str, Vec<&str>) -> ()) {
   let st : &str = "(eq Prop (Z.lt (unsigned (wsub (wadd x1 (wslu (wsru (wsub x2 x1) (ZToWord 4)) (ZToWord 3))) x1)) (Z.mul (unsigned (ZToWord 8)) (Z.of_nat (length word x)))) True)";
-  f(&st);
+  let es = vec![
+    // all lhs's and rhs's of the equalities above:
+    "(unsigned (wsub x2 x1))" , "(Z.mul 8 (Z.of_nat (length word x)))",
+    "(eq Z (unsigned (wsub x2 x1)) 0)" , "False",
+    "(and (Z.le 0 8) (Z.lt 8 (Z.pow 2 32)))" , "True",
+    "(and (Z.le 0 3) (Z.lt 3 32))" , "True",
+    "(and (Z.le 0 4) (Z.lt 4 32))" , "True",
+    "(Z.le 0 (Z.pow 2 3))" , "True",
+    "(Z.lt 0 (Z.pow 2 4))" , "True",
+    "(Z.lt 0 (Z.pow 2 32))" , "True",
+    "(Z.lt 0 (Z.pow 2 3))" , "True",
+    "(Z.lt (Z.pow 2 3) (Z.pow 2 4))" , "True",
+  ];
+  f_simplify(st, es);
+  // (eq Prop (Z.lt (unsigned (wslu (wsru (wsub x2 x1) (ZToWord 4)) (ZToWord 3))) (unsigned (wsub x2 x1))) True)
 }
 
 /*
@@ -98,7 +138,9 @@ pub enum CoqSimpleLanguage {
 pub fn run_simplifier(f : fn(&str) -> ()) {
     let st : &str = " (ATand (ATeq word (ATf (ATwadd b a)) (ATg b)) (ATand (ATsep R (ATword_array a (ATcons word v0 (ATcons word w1 (ATcons word w2 (ATnil word))))) m) (ATeq word (ATf (ATwadd b a)) (ATf (ATwadd a b))))) ";
     f(&st);
-}pub fn make_rules() -> Vec<Rewrite<CoqSimpleLanguage, ()>> { let mut v  : Vec<Rewrite<CoqSimpleLanguage, ()>> = vec![rewrite!("EGGTHSSOwadd_comm"; /* a0 b0 : word */ "(ATwadd ?a0 ?b0)"=>"(ATwadd ?b0 ?a0)"),
+}
+// pub fn make_rules() -> Vec<Rewrite<CoqSimpleLanguage, ()>> { let mut v  : Vec<Rewrite<CoqSimpleLanguage, ()>> = vec![rewrite!("EGGTHSSOwadd_comm"; /* a0 b0 : word */ "(ATwadd ?a0 ?b0)"=>"(ATwadd ?b0 ?a0)"),
+pub fn make_rules() -> Vec<Rewrite<SymbolLang, ()>> { let mut v  : Vec<Rewrite<SymbolLang, ()>> = vec![rewrite!("EGGTHSSOwadd_comm"; /* a0 b0 : word */ "(ATwadd ?a0 ?b0)"=>"(ATwadd ?b0 ?a0)"),
 rewrite!("EGGTHSOwadd_0_l"; /* a0 : word */ "(ATwadd (ATZToWord 0) ?a0)"=>"?a0"),
 rewrite!("EGGTHSOwadd_0_r"; /* a0 : word */ "(ATwadd ?a0 (ATZToWord 0))"=>"?a0"),
 rewrite!("EGGTHSOand_True_l"; /* P : Prop */ "(ATand True ?P)"=>"?P"),
