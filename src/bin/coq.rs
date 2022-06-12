@@ -97,16 +97,23 @@ fn holify(e: &Sexp) -> (Sexp, bool, Sexp, Sexp) {
 }
 /// parse an expression, simplify it using egg, and pretty print it back out
 #[allow(dead_code)]
-fn simplify(s: &str) -> () {
+fn simplify(s: &str, extra_s : Vec<&str>) -> () {
     // parse the expression, the type annotation tells it which Language to use
     let expr: RecExpr<CoqSimpleLanguage> = s.parse().unwrap();
     // let expr: RecExpr<SymbolLang> = s.parse().unwrap();
 
+    let mut extra_exprs1 = vec![];
+    for s in extra_s {
+        let e = s.parse::<RecExpr<CoqSimpleLanguage>>().unwrap();
+        extra_exprs1.push(e);
+    }
+    let extra_exprs : Vec<&RecExpr<CoqSimpleLanguage>> = extra_exprs1.iter().map(|x| &*x).collect();
     // simplify the expression using a Runner, which creates an e-graph with
     // the given expression and runs the given rules over it
     let mut runner = Runner::default()
         .with_explanations_enabled()
         .with_expr(&expr)
+        .with_exprs(extra_exprs)
         .run(&make_rules());
     // the Runner knows which e-class the expression given with `with_expr` is in
     let root = runner.roots[0];
