@@ -37,7 +37,7 @@ fn make_rules() -> Vec<Rewrite<SimpleLanguage, ()>> {
         //               =>
         //              "?b"),
         coq_rewrite!("inj-some"; 
-                     " ?posx = (Some ?a) = (Some ?b), ?foo = ?a"
+                     " ?chenil1 = (Some ?a) = (Some ?b), ?chenil2 = ?a"
                       =>
                      "?b"),
         // coq_rewrite!("le-tran"; 
