@@ -30,12 +30,10 @@ pub fn make_rules() -> Vec<Rewrite<CoqSimpleLanguage, ()>> {
   let v  : Vec<Rewrite<CoqSimpleLanguage, ()>> = vec![
     rewrite!("wadd_0_l"; "(wadd (ZToWord 0) ?a)" => "?a"),
     rewrite!("wadd_0_r"; "(wadd ?a (ZToWord 0))" => "?a"),
-    rewrite!("wadd_comm"; "(wadd ?a ?b)" => "(wadd ?b ?a)"),
-    rewrite!("wadd_assoc"; "(wadd ?a (wadd ?b ?c))" => "(wadd (wadd ?a ?b) ?c)"),
     rewrite!("wadd_opp"; "(wadd ?a (wopp ?a))" => "(ZToWord 0)"),
     rewrite!("wsub_def"; "(wsub ?a ?b)" => "(wadd ?a (wopp ?b))"),
     coq_rewrite!("unsigned_of_Z"; "?hyp$0 = (and (Z.le 0 ?a) (Z.lt ?a (Z.pow 2 32))) = True, ?lhs$ = (unsigned (ZToWord ?a))" => "?a"),
-    rewrite!("unsigned_nonneg"; "(Z.le 0 (unsigned ?x))" => "True"),
+    coq_rewrite!("unsigned_nonneg"; "?trigger$0 = (unsigned ?x), ?lhs$ = True" => "(Z.le 0 (unsigned ?x))"),
     coq_rewrite!("unsigned_sru_to_div_pow2"; "?hyp$0 = (and (Z.le 0 ?a) (Z.lt ?a 32)) = True, ?lhs$ = (unsigned (wsru ?x (ZToWord ?a)))" => "(Z.div (unsigned ?x) (Z.pow 2 ?a))"),
     coq_rewrite!("unsigned_slu_to_mul_pow2"; "?hyp$0 = (and (Z.le 0 ?a) (Z.lt ?a 32)) = True, ?lhs$ = (unsigned (wslu ?x (ZToWord ?a)))" => "(Z.modulo (Z.mul (unsigned ?x) (Z.pow 2 ?a)) (Z.pow 2 32))"),
     rewrite!("word_sub_add_l_same_l"; "(wsub (wadd ?x ?y) ?x)" => "?y"),
@@ -60,10 +58,10 @@ pub fn make_rules() -> Vec<Rewrite<CoqSimpleLanguage, ()>> {
     rewrite!("C8"; "(Z.lt (Z.pow 2 3) (Z.pow 2 4))" => "True"),
     rewrite!("C8-rev"; "True" => "(Z.lt (Z.pow 2 3) (Z.pow 2 4))"),
     coq_rewrite!("Z_forget_mod_in_lt_l"; "?hyp$0 = (Z.le 0 ?a) = True, ?hyp$1 = (Z.lt 0 ?m) = True, ?hyp$2 = (Z.lt ?a ?b) = True, ?lhs$ = (Z.lt (Z.modulo ?a ?m) ?b)" => "True"),
-    coq_rewrite!("Z_mul_le"; "?hyp$0 = (Z.le 0 ?e1) = True, ?hyp$1 = (Z.le 0 ?e2) = True, ?lhs$ = (Z.le 0 (Z.mul ?e1 ?e2))" => "True"),
-    coq_rewrite!("Z_div_pos"; "?hyp$0 = (Z.le 0 ?a) = True, ?hyp$1 = (Z.lt 0 ?b) = True, ?lhs$ = (Z.le 0 (Z.div ?a ?b))" => "True"),
-    coq_rewrite!("Z_div_mul_lt"; "?hyp$0 = (Z.lt 0 ?x) = True, ?hyp$1 = (Z.lt 0 ?d1) = True, ?hyp$2 = (Z.lt ?d1 ?d2) = True, ?lhs$ = (Z.lt (Z.mul (Z.div ?x ?d2) ?d1) ?x)" => "True"),
-    coq_rewrite!("Z_lt_from_le_and_neq"; "?hyp$0 = (Z.le ?x ?y) = True, ?hyp$1 = (not (@eq Z ?x ?y)) = True, ?lhs$ = (Z.lt ?x ?y)" => "True"),
+    coq_rewrite!("Z_mul_le"; "?hyp$0 = (Z.le 0 ?e1) = True, ?hyp$1 = (Z.le 0 ?e2) = True, ?trigger$0 = (Z.mul ?e1 ?e2), ?lhs$ = True" => "(Z.le 0 (Z.mul ?e1 ?e2))"),
+    coq_rewrite!("Z_div_pos"; "?hyp$0 = (Z.le 0 ?a) = True, ?hyp$1 = (Z.lt 0 ?b) = True, ?trigger$0 = (Z.div ?a ?b), ?lhs$ = True" => "(Z.le 0 (Z.div ?a ?b))"),
+    coq_rewrite!("Z_div_mul_lt"; "?hyp$0 = (Z.lt 0 ?x) = True, ?hyp$1 = (Z.lt 0 ?d1) = True, ?hyp$2 = (Z.lt ?d1 ?d2) = True, ?lhs$ = True" => "(Z.lt (Z.mul (Z.div ?x ?d2) ?d1) ?x)"),
+    coq_rewrite!("Z_lt_from_le_and_neq"; "?hyp$0 = (Z.le ?x ?y) = True, ?hyp$1 = (not (@eq Z ?x ?y)) = True, ?lhs$ = True" => "(Z.lt ?x ?y)"),
     rewrite!("H_eq_eq_sym"; "(@eq ?A ?x ?y)" => "(@eq ?A ?y ?x)"),
   ];
   v
@@ -75,7 +73,6 @@ pub fn get_lemma_arity(name: &str) -> Option<usize> {
     ("C3", 0),
     ("Z_forget_mod_in_lt_l", 6),
     ("unsigned_slu_to_mul_pow2", 3),
-    ("wadd_comm", 2),
     ("C6", 0),
     ("unsigned_nonneg", 1),
     ("H", 0),
@@ -87,7 +84,6 @@ pub fn get_lemma_arity(name: &str) -> Option<usize> {
     ("C7", 0),
     ("unsigned_sru_to_div_pow2", 3),
     ("C5", 0),
-    ("wadd_assoc", 3),
     ("H_eq_eq_sym", 3),
     ("Z_div_pos", 4),
     ("C2", 0),
@@ -108,7 +104,7 @@ pub fn get_lemma_arity(name: &str) -> Option<usize> {
 
 #[allow(unused_variables)]
 pub fn run_simplifier(f_simplify : fn(&str, Vec<&str>) -> (), f_prove : fn(&str, &str, Vec<&str>) -> ()) {
-  let st : &str = "(Z.lt (unsigned (wslu (wsru (wsub x2 x1) (ZToWord 4)) (ZToWord 3))) (unsigned (wsub x2 x1)))";
+  let st : &str = "(Z.lt (unsigned (wsub (wadd x1 (wslu (wsru (wsub x2 x1) (ZToWord 4)) (ZToWord 3))) x1)) (Z.mul (unsigned (ZToWord 8)) (Z.of_nat (@length word x))))";
   let es = vec![
     "(Z.le 0 (Z.pow 2 3))",
     "True",

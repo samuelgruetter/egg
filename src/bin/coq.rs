@@ -1,7 +1,9 @@
+use env_logger::*;
 use egg::*;
 use symbolic_expressions::*;
 
 fn main() {
+    env_logger::init();
     run_simplifier(simplify, prove);
     // run_simplifier(simplify);
     // simplify("(wadd x y)");
@@ -126,6 +128,7 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
     let extractor = Extractor::new(&runner.egraph, AstSize);
     let (best_cost, best) = extractor.find_best(root);
     println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
+    println!("Stop reason: {:?}", runner.stop_reason);
     let explanations = runner.explain_equivalence(&expr, &best).get_flat_sexps();
     let mut explanation = explanations.iter();
     explanation.next();
