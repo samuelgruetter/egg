@@ -116,7 +116,8 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
 
     // use an Extractor to pick the best element of the root eclass
     let extractor = Extractor::new(&runner.egraph, AstSize);
-    let (_best_cost, best) = extractor.find_best(root);
+    let (best_cost, best) = extractor.find_best(root);
+    println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
     let explanations = runner.explain_equivalence(&expr, &best).get_flat_sexps();
     let mut explanation = explanations.iter();
     explanation.next();
