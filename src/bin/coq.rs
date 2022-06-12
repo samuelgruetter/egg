@@ -102,18 +102,14 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
     let expr: RecExpr<CoqSimpleLanguage> = s.parse().unwrap();
     // let expr: RecExpr<SymbolLang> = s.parse().unwrap();
 
-    let mut extra_exprs1 = vec![];
-    for s in extra_s {
-        let e = s.parse::<RecExpr<CoqSimpleLanguage>>().unwrap();
-        extra_exprs1.push(e);
-    }
-    let extra_exprs : Vec<&RecExpr<CoqSimpleLanguage>> = extra_exprs1.iter().map(|x| &*x).collect();
+    let extra_exprs : Vec<RecExpr<CoqSimpleLanguage>> = extra_s.iter().map(|s| { s.parse::<RecExpr<CoqSimpleLanguage>>().unwrap()}).collect();
+    // let extra_exprs : Vec<&RecExpr<CoqSimpleLanguage>> = extra_exprs1.iter().map(|x| &*x).collect();
     // simplify the expression using a Runner, which creates an e-graph with
     // the given expression and runs the given rules over it
     let mut runner = Runner::default()
         .with_explanations_enabled()
         .with_expr(&expr)
-        .with_exprs(extra_exprs)
+        .with_exprs(extra_exprs.iter().map(|x| &*x).collect())
         .run(&make_rules());
     // the Runner knows which e-class the expression given with `with_expr` is in
     let root = runner.roots[0];
@@ -128,7 +124,8 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
         let (holified, fw, name_th, new) = holify(exp);
         // println!("{}", exp.to_string());
         let rw_lemma = if fw { "@rew_zoom_fw" } else { "@rew_zoom_bw" };
-        println!("eapply ({rw_lemma} _ {new} _  {name_th} (fun hole => {holified}));");
+        println!("(eapply ({rw_lemma} _ {new} _  {name_th} (fun hole => {holified})) || ");
+        println!("eapply ({rw_lemma} _ {new} _  (prove_True_eq _ {name_th}) (fun hole => {holified})));");
     }
     println!("idtac.")
 }
