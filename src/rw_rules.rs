@@ -27,7 +27,9 @@ pub enum CoqSimpleLanguage {
 pub fn run_simplifier(f : fn(&str) -> ()) {
     let st : &str = " (ATand (ATeq word (ATf (ATwadd b a)) (ATg b)) (ATand (ATsep R (ATword_array a (ATcons word v0 (ATcons word w1 (ATcons word w2 (ATnil word))))) m) (ATeq word (ATf (ATwadd b a)) (ATf (ATwadd a b))))) ";
     f(&st);
-}pub fn make_rules() -> Vec<Rewrite<CoqSimpleLanguage, ()>> { let mut v  : Vec<Rewrite<CoqSimpleLanguage, ()>> = vec![rewrite!("EGGTHSSOwadd_comm"; /* a0 b0 : word */ "(ATwadd ?a0 ?b0)"=>"(ATwadd ?b0 ?a0)"),
+}
+// pub fn make_rules() -> Vec<Rewrite<CoqSimpleLanguage, ()>> { let mut v  : Vec<Rewrite<CoqSimpleLanguage, ()>> = vec![rewrite!("EGGTHSSOwadd_comm"; /* a0 b0 : word */ "(ATwadd ?a0 ?b0)"=>"(ATwadd ?b0 ?a0)"),
+pub fn make_rules() -> Vec<Rewrite<SymbolLang, ()>> { let mut v  : Vec<Rewrite<SymbolLang, ()>> = vec![rewrite!("EGGTHSSOwadd_comm"; /* a0 b0 : word */ "(ATwadd ?a0 ?b0)"=>"(ATwadd ?b0 ?a0)"),
 rewrite!("EGGTHSOwadd_0_l"; /* a0 : word */ "(ATwadd (ATZToWord 0) ?a0)"=>"?a0"),
 rewrite!("EGGTHSOwadd_0_r"; /* a0 : word */ "(ATwadd ?a0 (ATZToWord 0))"=>"?a0"),
 rewrite!("EGGTHSOand_True_l"; /* P : Prop */ "(ATand True ?P)"=>"?P"),

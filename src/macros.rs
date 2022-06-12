@@ -332,8 +332,9 @@ macro_rules! coq_rewrite {
         $lhs:tt => $rhs:tt
     )  => {{
         let searcher = $crate::__rewrite!(@parse MultiPattern $lhs);
-        let core_applier = $crate::__rewrite!(@parse Pattern $rhs);
-        let applier = $crate::__rewrite!(@applier core_applier;);
+        let applier = $crate::__rewrite!(@parse Pattern $rhs);
+        // let core_applier = $crate::__rewrite!(@parse Pattern $rhs);
+        // let applier = $crate::__rewrite!(@applier core_applier;);
         $crate::Rewrite::new($name.to_string(), searcher, applier).unwrap()
     }};
 }
