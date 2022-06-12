@@ -23,19 +23,26 @@ fn holify_aux(e: &Sexp) -> Sexp {
     }
 }
 
+fn lemma_arity(s: &str) -> usize {
+    match get_lemma_arity(s) {
+        Some(a) => { return a; }
+        None => { 
+            match s.find('O') {
+                Some(idx) => {  /* "optimization" */ return idx - 5; }
+                None => { return 0; }
+            }
+        }
+    }
+}
+
 fn add_arity_th_name(e: &Sexp) -> Sexp {
     match e {
         Sexp::String(s) => {
-            match s.find('O') {
-                None => {
+            let number = lemma_arity(s);
+            if number == 0 {
                     return Sexp::String(s.clone().replace("-rev", ""));
-                }
-                Some(idx) => {
-                    // optimization
-                    let number = idx - 5;
+            } else {
                     let mut v = vec![e.clone()];
-                    assert_eq!([1, 2].repeat(3), vec![1, 2, 1, 2, 1, 2]);
-
                     let arg_implicit_aux = ["_"].repeat(number);
                     let arg_implicit = arg_implicit_aux
                         .iter()
@@ -43,7 +50,6 @@ fn add_arity_th_name(e: &Sexp) -> Sexp {
                         .collect::<Vec<_>>();
                     v.extend(arg_implicit);
                     return Sexp::List(v.clone());
-                }
             }
         }
         _ => {
