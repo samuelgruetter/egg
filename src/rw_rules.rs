@@ -1,3 +1,74 @@
+
+#![allow(missing_docs,non_camel_case_types)]
+use crate ::*;
+define_language! {
+  pub enum CoqSimpleLanguage {
+    Num(i32),
+    "eq" = eq([Id; 3]),
+    "wadd" = wadd([Id; 2]),
+    "Z.pow" = ZDOTpow([Id; 2]),
+    "Z.div" = ZDOTdiv([Id; 2]),
+    "wslu" = wslu([Id; 2]),
+    "wsub" = wsub([Id; 2]),
+    "Z.mul" = ZDOTmul([Id; 2]),
+    "length" = length([Id; 2]),
+    "wopp" = wopp([Id; 1]),
+    "Z.lt" = ZDOTlt([Id; 2]),
+    "ZToWord" = ZToWord([Id; 1]),
+    "unsigned" = unsigned([Id; 1]),
+    "wsru" = wsru([Id; 2]),
+    "and" = and([Id; 2]),
+    "Z.of_nat" = ZDOTof_nat([Id; 1]),
+    "Z.modulo" = ZDOTmodulo([Id; 2]),
+    "Z.le" = ZDOTle([Id; 2]),
+    Symbol(Symbol),
+  }
+}
+
+pub fn make_rules() -> Vec<Rewrite<CoqSimpleLanguage, ()>> {
+  let v : Vec<Rewrite<CoqSimpleLanguage, ()>> = vec![
+    rewrite!("wadd_0_l"; "(wadd (ZToWord 0) ?a)" => "?a"),
+    rewrite!("wadd_0_r"; "(wadd ?a (ZToWord 0))" => "?a"),
+    rewrite!("wadd_comm"; "(wadd ?a ?b)" => "(wadd ?b ?a)"),
+    rewrite!("wadd_assoc"; "(wadd ?a (wadd ?b ?c))" => "(wadd (wadd ?a ?b) ?c)"),
+    rewrite!("wadd_opp"; "(wadd ?a (wopp ?a))" => "(ZToWord 0)"),
+    rewrite!("wsub_def"; "(wsub ?a ?b)" => "(wadd ?a (wopp ?b))"),
+    rewrite!("unsigned_nonneg"; "(Z.le 0 (unsigned ?x))" => "True"),
+    rewrite!("word_sub_add_l_same_l"; "(wsub (wadd ?x ?y) ?x)" => "?y"),
+    rewrite!("H"; "(unsigned (wsub x2 x1))" => "(Z.mul 8 (Z.of_nat (length word x)))"),
+    rewrite!("H0"; "(eq Z (unsigned (wsub x2 x1)) 0)" => "False"),
+    rewrite!("C1"; "(and (Z.le 0 8) (Z.lt 8 (Z.pow 2 32)))" => "True"),
+    rewrite!("C2"; "(and (Z.le 0 3) (Z.lt 3 32))" => "True"),
+    rewrite!("C3"; "(and (Z.le 0 4) (Z.lt 4 32))" => "True"),
+    rewrite!("C4"; "(Z.le 0 (Z.pow 2 3))" => "True"),
+    rewrite!("C5"; "(Z.lt 0 (Z.pow 2 4))" => "True"),
+    rewrite!("C6"; "(Z.lt 0 (Z.pow 2 32))" => "True"),
+    rewrite!("C7"; "(Z.lt 0 (Z.pow 2 3))" => "True"),
+    rewrite!("C8"; "(Z.lt (Z.pow 2 3) (Z.pow 2 4))" => "True"),
+
+    // manual
+    coq_rewrite!("unsigned_of_Z"; 
+      "?hyp1 = (and (Z.le 0 ?a) (Z.lt ?a (Z.pow 2 32))) = True, ?lhs = (unsigned (ZToWord ?a))"
+       => "?a"),
+
+    coq_rewrite!("unsigned_sru_to_div_pow2"; 
+      "?hyp1 = (and (Z.le 0 ?a) (Z.lt ?a 32)) = True, ?lhs = (unsigned (wsru ?x (ZToWord ?a)))"
+       => "(Z.div (unsigned ?x) (Z.pow 2 ?a))"),
+    
+    coq_rewrite!("unsigned_slu_to_mul_pow2"; 
+      "?hyp1 = (and (Z.le 0 ?a) (Z.lt ?a 32)) = True, ?lhs = (unsigned (wslu ?x (ZToWord ?a)))"
+      => "(Z.modulo (Z.mul (unsigned ?x) (Z.pow 2 ?a)) (Z.pow 2 32))"),
+ 
+  ];
+  v
+}
+
+pub fn run_simplifier(f : fn(&str) -> ()) {
+  let st : &str = "(eq Prop (Z.lt (unsigned (wsub (wadd x1 (wslu (wsru (wsub x2 x1) (ZToWord 4)) (ZToWord 3))) x1)) (Z.mul (unsigned (ZToWord 8)) (Z.of_nat (length word x)))) True)";
+  f(&st);
+}
+
+/*
 #![allow(missing_docs,non_camel_case_types)]
 use crate ::*;
 define_language! {
@@ -49,4 +120,6 @@ rewrite!("EGGTHSSSOour_app_cons"; /* (x y : list word) (a0 : word) */           
 rewrite!("EGGTHSSSOsep_comm"; /* (P Q : mem_pred) (m0 : mem) */                    "(ATsep ?P ?Q ?m0)"=>"(ATsep ?Q ?P ?m0)")];v.extend(vec![rewrite!("EGGHYPhyp_missing"; "(ATf (ATwadd a b))"<=>"(ATg b)"),
 rewrite!("EGGHYPA1"; "(ATunsigned (ATZToWord 8))"<=>"8"),
 rewrite!("EGGHYPC1"; "(ATZDOTto_nat (ATmydiv 8 4))"<=>"(ATMySuc (ATMySuc MyO))"),
-rewrite!("EGGHYPH"; "(ATsep           (ATword_array a           (ATapp word           (ATListDOTfirstn word           (ATZDOTto_nat           (ATmydiv (ATunsigned (ATwadd (ATwadd a (ATZToWord 8)) (ATwopp a))) 4))           (ATapp word           (ATListDOTfirstn word (ATMySuc MyO)           (ATcons word v0 (ATcons word v1 (ATcons word v2 (ATnil word)))))           (ATapp word (ATcons word w1 (ATnil word))           (ATListDOTskipn word (ATMySuc (ATMySuc MyO))           (ATcons word v0 (ATcons word v1 (ATcons word v2 (ATnil word))))))))           (ATapp word (ATcons word w2 (ATnil word))           (ATListDOTskipn word           (ATMySuc           (ATZDOTto_nat           (ATmydiv (ATunsigned (ATwadd (ATwadd a (ATZToWord 8)) (ATwopp a))) 4)))           (ATapp word           (ATListDOTfirstn word (ATMySuc MyO)           (ATcons word v0 (ATcons word v1 (ATcons word v2 (ATnil word)))))           (ATapp word (ATcons word w1 (ATnil word))           (ATListDOTskipn word (ATMySuc (ATMySuc MyO))           (ATcons word v0 (ATcons word v1 (ATcons word v2 (ATnil word)))))))))))           R m)"<=>"True")].concat()); v}
+rewrite!("EGGHYPH"; "(ATsep           (ATword_array a           (ATapp word           (ATListDOTfirstn word           (ATZDOTto_nat           (ATmydiv (ATunsigned (ATwadd (ATwadd a (ATZToWord 8)) (ATwopp a))) 4))           (ATapp word           (ATListDOTfirstn word (ATMySuc MyO)           (ATcons word v0 (ATcons word v1 (ATcons word v2 (ATnil word)))))           (ATapp word (ATcons word w1 (ATnil word))           (ATListDOTskipn word (ATMySuc (ATMySuc MyO))           (ATcons word v0 (ATcons word v1 (ATcons word v2 (ATnil word))))))))           (ATapp word (ATcons word w2 (ATnil word))           (ATListDOTskipn word           (ATMySuc           (ATZDOTto_nat           (ATmydiv (ATunsigned (ATwadd (ATwadd a (ATZToWord 8)) (ATwopp a))) 4)))           (ATapp word           (ATListDOTfirstn word (ATMySuc MyO)           (ATcons word v0 (ATcons word v1 (ATcons word v2 (ATnil word)))))           (ATapp word (ATcons word w1 (ATnil word))           (ATListDOTskipn word (ATMySuc (ATMySuc MyO))           (ATcons word v0 (ATcons word v1 (ATcons word v2 (ATnil word)))))))))))           R m)"<=>"True"),
+].concat()); v}
+*/

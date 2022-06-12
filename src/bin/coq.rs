@@ -99,8 +99,8 @@ fn holify(e: &Sexp) -> (Sexp, bool, Sexp, Sexp) {
 #[allow(dead_code)]
 fn simplify(s: &str) -> () {
     // parse the expression, the type annotation tells it which Language to use
-    // let expr: RecExpr<CoqSimpleLanguage> = s.parse().unwrap();
-    let expr: RecExpr<SymbolLang> = s.parse().unwrap();
+    let expr: RecExpr<CoqSimpleLanguage> = s.parse().unwrap();
+    // let expr: RecExpr<SymbolLang> = s.parse().unwrap();
 
     // simplify the expression using a Runner, which creates an e-graph with
     // the given expression and runs the given rules over it
@@ -113,7 +113,8 @@ fn simplify(s: &str) -> () {
 
     // use an Extractor to pick the best element of the root eclass
     let extractor = Extractor::new(&runner.egraph, AstSize);
-    let (_best_cost, best) = extractor.find_best(root);
+    let (best_cost, best) = extractor.find_best(root);
+    println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
     let explanations = runner.explain_equivalence(&expr, &best).get_flat_sexps();
     let mut explanation = explanations.iter();
     explanation.next();
@@ -129,10 +130,10 @@ fn simplify(s: &str) -> () {
 #[allow(dead_code)]
 fn prove(s_l: &str, s_r: &str) -> () {
     // parse the expression, the type annotation tells it which Language to use
-    // let expr_l: RecExpr<CoqSimpleLanguage> = s_l.parse().unwrap();
-    let expr_l: RecExpr<SymbolLang> = s_l.parse().unwrap();
-    // let expr_r: RecExpr<CoqSimpleLanguage> = s_r.parse().unwrap();
-    let expr_r: RecExpr<SymbolLang> = s_r.parse().unwrap();
+    let expr_l: RecExpr<CoqSimpleLanguage> = s_l.parse().unwrap();
+    // let expr_l: RecExpr<SymbolLang> = s_l.parse().unwrap();
+    let expr_r: RecExpr<CoqSimpleLanguage> = s_r.parse().unwrap();
+    // let expr_r: RecExpr<SymbolLang> = s_r.parse().unwrap();
 
     // simplify the expression using a Runner, which creates an e-graph with
     // the given expression and runs the given rules over it
