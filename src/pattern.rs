@@ -347,7 +347,7 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
     }
 
     fn search_eclass(&self, egraph: &EGraph<L, A>, eclass: Id) -> Option<SearchMatches<L>> {
-        let mut substs = self.program.run(egraph, eclass);
+        let /*mut*/ substs = self.program.run(egraph, eclass);
         //substs.retain(|s| nonloopy(&self.ast, s, egraph)); // in-place filter
         if substs.is_empty() {
             None

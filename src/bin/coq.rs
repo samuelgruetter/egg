@@ -103,57 +103,6 @@ fn holify(e: &Sexp) -> (Sexp, bool, Sexp, Sexp) {
     }
 }
 
-fn print_eclasses<L: egg::Language + std::fmt::Display, N: egg::Analysis<L>>(eg: &EGraph<L, N>) -> () {
-    let extractor = Extractor::new(eg, AstSize);
-    let mut classes : Vec<&EClass<L, _>> = eg.classes().collect();
-    classes.sort_by(|a, b| a.id.cmp(&b.id));
-    for class in classes {
-        let i = class.id;
-        println!("\nClass {i}");
-        for node in class.nodes.iter() {
-            // The display() method implemented by define_language! macro happens to print only the op name
-            // TODO is there a cleaner way to obtain the op name?
-            let opname = format!("{}", node);
-            let mut s: String = "".to_string();
-            s.push_str(&opname);
-            for child in node.children().iter() {
-                let (_best_cost, best) = extractor.find_best(*child);
-                s.push_str(&format!(" {}", best));
-            }
-            if node.children().is_empty() {
-                println!("- {s}");
-            } else {
-                println!("- ({s})");
-            }
-        }
-    }
-    println!("");
-}
-
-fn why_exists(runner: &mut Runner<CoqSimpleLanguage, ()>, s: &str) -> () {
-    println!("Explanation of why {s} exists:");
-    let e: RecExpr<CoqSimpleLanguage> = s.parse().unwrap();
-    let expl = runner.explain_existance(&e).get_flat_sexps();
-    for line in expl {
-        println!("{}", line);
-    }
-    println!("");
-}
-
-#[allow(dead_code)]
-fn why_exists_uselessly_iterative(runner: &mut Runner<CoqSimpleLanguage, ()>, s: &str) -> () {
-    let mut current: RecExpr<CoqSimpleLanguage> = s.parse().unwrap();
-    for _i in 1..100 {
-        println!("{current}");
-        println!("exists because of");
-        let expl = runner.explain_existance(&current).get_flat_sexps();
-        let firstline = &expl[0];
-        let first_s = format!("{}", firstline);
-        println!("{first_s}");
-        current = first_s.parse().unwrap();
-    }
-    println!("...\n");
-}
 /// parse an expression, simplify it using egg, and pretty print it back out
 #[allow(dead_code)]
 fn simplify(s: &str, extra_s : Vec<&str>) -> () {
