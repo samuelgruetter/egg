@@ -3,6 +3,7 @@ use log::*;
 use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::{convert::TryFrom, str::FromStr};
+use hashbrown::HashSet;
 
 use thiserror::Error;
 
@@ -97,6 +98,14 @@ impl<L: Language> PatternAst<L> {
         }
 
         new
+    }
+
+    /// Checks that the expression obtained by instantiating `pat` with `subst` c does 
+    /// not contain any subterm that is in the same eclass as one of its ancestors.
+    pub fn nonloopy<A: Analysis<L>>(&self, subst: &Subst, egraph: &EGraph<L, A>) -> bool {
+        let b = nonloopy_rec(self.as_ref(), subst, egraph).is_some();
+        println!("nonloopy: {b}");
+        return b;
     }
 }
 
@@ -257,7 +266,6 @@ pub struct SearchMatches<'a, L: Language> {
     pub ast: Option<Cow<'a, PatternAst<L>>>,
 }
 
-use hashbrown::HashSet;
 
 /// Checks that the expression obtained by instantiating `pat` with `subst` c does 
 /// not contain any subterm that is in the same eclass as one of its ancestors.
@@ -313,14 +321,6 @@ fn nonloopy_rec<L: Language, A: Analysis<L>>(pat: &[ENodeOrVar<L>], subst: &Subs
     }
 }
 
-/// Checks that the expression obtained by instantiating `pat` with `subst` c does 
-/// not contain any subterm that is in the same eclass as one of its ancestors.
-fn nonloopy<L: Language, A: Analysis<L>>(pat: &PatternAst<L>, subst: &Subst, egraph: &EGraph<L, A>) -> bool {
-    let b = nonloopy_rec(pat.as_ref(), subst, egraph).is_some();
-    println!("nonloopy: {b}");
-    return b;
-}
-
 impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
     fn get_pattern_ast(&self) -> Option<&PatternAst<L>> {
         Some(&self.ast)
@@ -348,7 +348,7 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
 
     fn search_eclass(&self, egraph: &EGraph<L, A>, eclass: Id) -> Option<SearchMatches<L>> {
         let mut substs = self.program.run(egraph, eclass);
-        substs.retain(|s| nonloopy(&self.ast, s, egraph)); // in-place filter
+        //substs.retain(|s| nonloopy(&self.ast, s, egraph)); // in-place filter
         if substs.is_empty() {
             None
         } else {
