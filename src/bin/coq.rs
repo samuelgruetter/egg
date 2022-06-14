@@ -177,8 +177,6 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
     // use an Extractor to pick the best element of the root eclass
     let extractor = Extractor::new(&runner.egraph, AstSize);
     let (best_cost, best) = extractor.find_best(root);
-    println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
-    println!("Stop reason: {:?}", runner.stop_reason);
     
     print_eclasses(&runner.egraph);
     why_exists(&mut runner, "(wadd x1 x1)");
@@ -193,7 +191,10 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
         println!("(eapply ({rw_lemma} _ {new} _  {name_th} (fun hole => {holified})) || ");
         println!("eapply ({rw_lemma} _ {new} _  (prove_True_eq _ {name_th}) (fun hole => {holified})));");
     }
-    println!("idtac.")
+    println!("idtac.");
+
+    println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
+    println!("Stop reason: {:?}", runner.stop_reason);
 }
 
 #[allow(dead_code)]
