@@ -3,7 +3,6 @@ use log::*;
 use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::{convert::TryFrom, str::FromStr};
-use hashbrown::HashSet;
 
 use thiserror::Error;
 
@@ -102,8 +101,8 @@ impl<L: Language> PatternAst<L> {
 
     /// Checks that the expression obtained by instantiating `pat` with `subst` c does 
     /// not contain any subterm that is in the same eclass as one of its ancestors.
-    pub fn nonloopy<A: Analysis<L>>(&self, subst: &Subst, egraph: &EGraph<L, A>) -> bool {
-        let b = nonloopy_rec(self.as_ref(), subst, egraph).is_some();
+    pub fn nonloopy<A: Analysis<L>>(&self, subst: &Subst, egraph: &EGraph<L, A>, subterm_map: &HashMap<Id, HashSet<Id>>) -> bool {
+        let b = nonloopy_rec(self.as_ref(), subst, egraph, subterm_map).is_some();
         println!("nonloopy: {b}");
         return b;
     }
@@ -274,11 +273,11 @@ pub struct SearchMatches<'a, L: Language> {
 /// The HashSets are mutable, but each function only mutates the one set that it
 /// creates and returns.
 fn nonloopy_rec<L: Language, A: Analysis<L>>(pat: &[ENodeOrVar<L>], subst: &Subst, 
-    egraph: &EGraph<L, A>) -> Option<(Id, HashSet<Id>)> 
+    egraph: &EGraph<L, A>, subterm_map: &HashMap<Id, HashSet<Id>>) -> Option<(Id, HashSet<Id>)> 
 {
     // both mutable in the sense that we modify its contents
     // and that we reassign the variable to an entirely new set
-    let mut used_eclasses: HashSet<Id> = HashSet::new();
+    let mut used_eclasses: HashSet<Id> = HashSet::default();
     match pat.last().unwrap() {
         ENodeOrVar::ENode(pattern_node) => {
             let mut loopy = false;
@@ -290,7 +289,7 @@ fn nonloopy_rec<L: Language, A: Analysis<L>>(pat: &[ENodeOrVar<L>], subst: &Subs
                 // any more, but an enode
                 let i = usize::from(*child_ptr) + 1;
                 let child: &[ENodeOrVar<L>] = &pat[..i];
-                match nonloopy_rec(child, subst, egraph) {
+                match nonloopy_rec(child, subst, egraph, subterm_map) {
                     Some((eid_child, u_child)) => {
                         // TODO calling collect each time causes runtime to be quadratic 
                         used_eclasses = used_eclasses.union(&u_child).map(|id| *id).collect();
@@ -315,7 +314,7 @@ fn nonloopy_rec<L: Language, A: Analysis<L>>(pat: &[ENodeOrVar<L>], subst: &Subs
         }
         ENodeOrVar::Var(x) => { 
             let eid = *subst.get(*x).unwrap();
-            used_eclasses.insert(eid);
+            used_eclasses = subterm_map.get(&eid).unwrap().clone();
             Some((eid, used_eclasses))
         }
     }

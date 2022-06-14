@@ -684,6 +684,42 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     pub fn dump(&self) -> impl Debug + '_ {
         EGraphDump(self)
     }
+
+    /// For each eclass, returns the set of all eids that can appear as subterms
+    /// a term of that eclass
+    pub fn subterm_map(&self) -> HashMap<Id, HashSet<Id>> {
+        let mut m: HashMap<Id, HashSet<Id>> = HashMap::default();
+        //for (eid, eclass) in self.classes.iter() {
+        for eid in self.classes.keys() {
+            let mut s = HashSet::default();
+            // each term is an immediate subterm of itself
+            s.insert(*eid);
+            m.insert(*eid, s);
+        }
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for (_eid, subterms) in m.iter_mut() {
+                let mut new_subterms: Vec<Id> = Vec::new(); // intermediate storage to avoid modification while iterating
+                for subterm in subterms.iter() {
+                    for n in self.classes.get(subterm).unwrap().iter() {
+                        for subsubterm in n.children() {
+                            if subterms.get(subsubterm).is_none() {
+                                new_subterms.push(*subsubterm);
+                            }
+                        }
+                    }
+                }
+                if !new_subterms.is_empty() {
+                    changed = true;
+                    for subsubterm in new_subterms.iter() {
+                        subterms.insert(*subsubterm);
+                    }
+                }
+            }
+        }
+        return m;
+    }
 }
 
 impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
