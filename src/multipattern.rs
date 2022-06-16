@@ -160,17 +160,20 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
         // the ids returned are kinda garbage
         let mut added = vec![];
         for mat in matches {
+            let from_pat: &PatternAst<L> = mat.ast.as_ref().unwrap().as_ref();
             for subst in &mat.substs {
                 let mut subst = subst.clone();
                 let mut id_buf = vec![];
                 for (i, (v, p)) in self.asts.iter().enumerate() {
                     id_buf.resize(p.as_ref().len(), 0.into());
-                    let id1 = crate::pattern::apply_pat(&mut id_buf, p.as_ref(), egraph, &subst);
-                    if let Some(id2) = subst.insert(*v, id1) {
-                        egraph.union(id1, id2);
-                    }
-                    if i == 0 {
-                        added.push(id1)
+                    if let Some(ffn) = egraph.increase_ffn(egraph.max_ffn_of_instantiated_pattern(from_pat, &subst)) {
+                        let id1 = crate::pattern::apply_pat(&mut id_buf, p.as_ref(), egraph, &subst, ffn);
+                        if let Some(id2) = subst.insert(*v, id1) {
+                            egraph.union(id1, id2);
+                        }
+                        if i == 0 {
+                            added.push(id1)
+                        }
                     }
                 }
             }

@@ -9,6 +9,26 @@ use ::serde::{Deserialize, Serialize};
 
 use log::*;
 
+/// Far-fetched-ness values
+pub type Ffn = u8;
+
+pub fn ffn_max(a: Ffn, b: Ffn) -> Ffn {
+    u8::max(a, b)
+}
+
+pub fn ffn_min(a: Ffn, b: Ffn) -> Ffn {
+    u8::min(a, b)
+}
+
+pub fn ffn_zero() -> Ffn {
+    0
+}
+
+pub fn ffn_infinity() -> Ffn {
+    255
+}
+
+
 /** A data structure to keep track of equalities between expressions.
 
 Check out the [background tutorial](crate::tutorials::_01_background)
@@ -84,6 +104,18 @@ pub struct EGraph<L: Language, N: Analysis<L>> {
     /// Only manually set it if you know what you're doing.
     #[cfg_attr(feature = "serde-1", serde(skip))]
     pub clean: bool,
+
+    /// Stores the far-fetched-ness of each enode, which is defined as follows:
+    /// - enodes appearing in exprs that were added as initial expressions
+    ///   (using Runner.with_expr) have farfetchedness 0.
+    /// - whenever an rewrite adds new enodes (by instantiating an applier (rhs) pattern),
+    ///   all new enodes have their farfetchedness set to the farfetchedness of the
+    ///   instantiated searcher (lhs) pattern plus the cost of the rule, which currently equals
+    ///   1 for all rules.
+    pub farfetchedness: HashMap<Id, Ffn>,
+
+    /// Max allowed far-fetched-ness (enodes may have this value, but patterns with this value don't trigger any more)
+    pub ffn_limit: Ffn,
 }
 
 #[cfg(feature = "serde-1")]
@@ -120,6 +152,8 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
             memo: Default::default(),
             analysis_pending: Default::default(),
             classes_by_op: Default::default(),
+            farfetchedness: Default::default(),
+            ffn_limit: 2, // TODO make configurable
         }
     }
 
@@ -208,8 +242,8 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     /// flattened form. Each of these also has a s-expression string representation,
     /// given by [`get_flat_string`](Explanation::get_flat_string) and [`get_string`](Explanation::get_string).
     pub fn explain_equivalence(&mut self, left: &RecExpr<L>, right: &RecExpr<L>) -> Explanation<L> {
-        let left = self.add_expr_internal(left);
-        let right = self.add_expr_internal(right);
+        let left = self.lookup_expr(left).expect("left expr not found, use add_expr before calling explain_equivalence");
+        let right = self.lookup_expr(right).expect("right expr not found, use add_expr before calling explain_equivalence");
         if let Some(explain) = &mut self.explain {
             explain.explain_equivalence(left, right)
         } else {
@@ -226,7 +260,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     /// Note that this function can be called again to explain any intermediate terms
     /// used in the output [`Explanation`].
     pub fn explain_existance(&mut self, expr: &RecExpr<L>) -> Explanation<L> {
-        let id = self.add_expr_internal(expr);
+        let id = self.lookup_expr(expr).expect("expr not found, use add_expr before calling explain_existance");
         if let Some(explain) = &mut self.explain {
             explain.explain_existance(id)
         } else {
@@ -237,24 +271,29 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     /// Return an [`Explanation`] for why a pattern appears in the egraph.
     pub fn explain_existance_pattern(
         &mut self,
-        pattern: &PatternAst<L>,
-        subst: &Subst,
+        _pattern: &PatternAst<L>,
+        _subst: &Subst,
     ) -> Explanation<L> {
+        panic!("This query is disabled at the moment because we don't want to alter farfetchedness levels");
+        /*
         let id = self.add_instantiation_internal(pattern, subst);
         if let Some(explain) = &mut self.explain {
             explain.explain_existance(id)
         } else {
             panic!("Use runner.with_explanations_enabled() or egraph.with_explanations_enabled() before running to get explanations.")
         }
+        */
     }
 
     /// Get an explanation for why an expression matches a pattern.
     pub fn explain_matches(
         &mut self,
-        left: &RecExpr<L>,
-        right: &PatternAst<L>,
-        subst: &Subst,
+        _left: &RecExpr<L>,
+        _right: &PatternAst<L>,
+        _subst: &Subst,
     ) -> Explanation<L> {
+        panic!("This query is disabled at the moment because we don't want to alter farfetchedness levels");
+        /*
         let left = self.add_expr_internal(left);
         let right = self.add_instantiation_internal(right, subst);
         if let Some(explain) = &mut self.explain {
@@ -262,6 +301,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         } else {
             panic!("Use runner.with_explanations_enabled() or egraph.with_explanations_enabled() before running to get explanations.");
         }
+        */
     }
 
     /// Canonicalizes an eclass id.
@@ -340,19 +380,19 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     ///
     /// [`add_expr`]: EGraph::add_expr()
     pub fn add_expr(&mut self, expr: &RecExpr<L>) -> Id {
-        let id = self.add_expr_internal(expr);
+        let id = self.add_expr_internal(expr, ffn_zero());
         self.find(id)
     }
 
     /// Adds an expr to the egraph, and returns the uncanonicalized id of the top enode.
-    fn add_expr_internal(&mut self, expr: &RecExpr<L>) -> Id {
+    fn add_expr_internal(&mut self, expr: &RecExpr<L>, ffn: Ffn) -> Id {
         let nodes = expr.as_ref();
         let mut new_ids = Vec::with_capacity(nodes.len());
         let mut new_node_q = Vec::with_capacity(nodes.len());
         for node in nodes {
             let new_node = node.clone().map_children(|i| new_ids[usize::from(i)]);
             let size_before = self.unionfind.size();
-            let next_id = self.add_internal(new_node);
+            let next_id = self.add_internal(new_node, ffn);
             if self.unionfind.size() > size_before {
                 new_node_q.push(true);
             } else {
@@ -373,12 +413,12 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// Adds a [`Pattern`] and a substitution to the [`EGraph`], returning
     /// the eclass of the instantiated pattern.
-    pub fn add_instantiation(&mut self, pat: &PatternAst<L>, subst: &Subst) -> Id {
-        let id = self.add_instantiation_internal(pat, subst);
+    pub fn add_instantiation(&mut self, pat: &PatternAst<L>, subst: &Subst, ffn: Ffn) -> Id {
+        let id = self.add_instantiation_internal(pat, subst, ffn);
         self.find(id)
     }
 
-    fn add_instantiation_internal(&mut self, pat: &PatternAst<L>, subst: &Subst) -> Id {
+    fn add_instantiation_internal(&mut self, pat: &PatternAst<L>, subst: &Subst, ffn: Ffn) -> Id {
         let nodes = pat.as_ref();
         let mut new_ids = Vec::with_capacity(nodes.len());
         let mut new_node_q = Vec::with_capacity(nodes.len());
@@ -392,7 +432,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
                 ENodeOrVar::ENode(node) => {
                     let new_node = node.clone().map_children(|i| new_ids[usize::from(i)]);
                     let size_before = self.unionfind.size();
-                    let next_id = self.add_internal(new_node);
+                    let next_id = self.add_internal(new_node, ffn);
                     if self.unionfind.size() > size_before {
                         new_node_q.push(true);
                     } else {
@@ -487,12 +527,29 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     ///
     /// [`add`]: EGraph::add()
     pub fn add(&mut self, enode: L) -> Id {
-        let id = self.add_internal(enode);
+        self.add_with_farfetchedness(enode, ffn_zero())
+    }
+
+    #[allow(missing_docs)]
+    pub fn add_with_farfetchedness(&mut self, enode: L, ffn: Ffn) -> Id {
+        let id = self.add_internal(enode, ffn);
         self.find(id)
     }
 
     /// Adds an enode to the egraph and also returns the the enode's id (uncanonicalized).
-    fn add_internal(&mut self, mut enode: L) -> Id {
+    fn add_internal(&mut self, enode: L, ffn: Ffn) -> Id {
+        let id = self.add_internal_without_ffn(enode);
+        if let Some(ffn_ptr) = self.farfetchedness.get_mut(&id) {
+            *ffn_ptr = ffn_min(ffn, *ffn_ptr);
+        } else {
+            println!("Enode {id} has far-fetched-ness {ffn}");
+            self.farfetchedness.insert(id, ffn);
+        }
+        id
+    }
+
+    /// Adds an enode to the egraph and also returns the the enode's id (uncanonicalized).
+    fn add_internal_without_ffn(&mut self, mut enode: L) -> Id {
         let original = enode.clone();
         if let Some(existing_id) = self.lookup_internal(&mut enode) {
             let id = self.find(existing_id);
@@ -575,6 +632,46 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         equiv_eclasses
     }
 
+    /// TODO later, this function could take a rule name,
+    /// or cost derived from a rule name
+    pub fn increase_ffn(&self, a: Ffn) -> Option<Ffn> {
+        if a < self.ffn_limit { Some(a + 1) } else { None }
+    }
+
+    fn min_ffn_of_class(&self, eclass_id: Id) -> Ffn {
+        let mut current_min = ffn_infinity();
+        for enode in self.classes.get(&eclass_id).unwrap().nodes.iter() {
+            let enode_id = self.memo.get(enode).unwrap();
+            current_min = ffn_min(current_min, *self.farfetchedness.get(enode_id).unwrap());
+        }
+        return current_min;
+    }
+
+    /// Given a pattern `pat`, which, when instantiated with substitution `subst`,
+    /// already is part of the egraph, return the biggest farfetchedness of any enode
+    /// appearing in the instantiated pattern
+    pub fn max_ffn_of_instantiated_pattern(&self, pat: &PatternAst<L>, subst: &Subst) -> Ffn {
+        let nodes = pat.as_ref();
+        let mut instantiated_ids = Vec::with_capacity(nodes.len());
+        let mut current_max = ffn_zero();
+        for node in nodes {
+            match node {
+                ENodeOrVar::Var(var) => {
+                    let id = subst[*var];
+                    instantiated_ids.push(id);
+                    current_max = ffn_max(current_max, self.min_ffn_of_class(id));
+                }
+                ENodeOrVar::ENode(node) => {
+                    let instantiated_node = node.clone().map_children(|i| instantiated_ids[usize::from(i)]);
+                    let id = self.lookup_internal(instantiated_node).unwrap();
+                    instantiated_ids.push(id);
+                    current_max = ffn_max(current_max, *self.farfetchedness.get(&id).unwrap());
+                }
+            }
+        }
+        current_max
+    }
+
     /// Given two patterns and a substitution, add the patterns
     /// and union them.
     ///
@@ -590,17 +687,20 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         subst: &Subst,
         rule_name: impl Into<Symbol>,
     ) -> (Id, bool) {
-        let id1 = self.add_instantiation_internal(from_pat, subst);
-        let size_before = self.unionfind.size();
-        let id2 = self.add_instantiation_internal(to_pat, subst);
-        let rhs_new = self.unionfind.size() > size_before;
+        let id1 = self.add_instantiation_internal(from_pat, subst, ffn_zero()); // TODO why is this not just a lookup?
+        let mut did_union = false;
+        if let Some(ffn) = self.increase_ffn(self.max_ffn_of_instantiated_pattern(from_pat, subst)) {
+            let size_before = self.unionfind.size();
+            let id2 = self.add_instantiation_internal(to_pat, subst, ffn);
+            let rhs_new = self.unionfind.size() > size_before;
 
-        let did_union = self.perform_union(
-            id1,
-            id2,
-            Some(Justification::Rule(rule_name.into())),
-            rhs_new,
-        );
+            did_union = self.perform_union(
+                id1,
+                id2,
+                Some(Justification::Rule(rule_name.into())),
+                rhs_new,
+            );
+        }
         (self.find(id1), did_union)
     }
 
@@ -942,6 +1042,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         n_unions
     }
 
+    #[allow(dead_code)]
     pub(crate) fn check_each_explain(&self, rules: &[&Rewrite<L, N>]) -> bool {
         if let Some(explain) = &self.explain {
             explain.check_each_explain(rules)

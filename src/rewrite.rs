@@ -1,4 +1,4 @@
-use pattern::apply_pat;
+//use pattern::apply_pat;
 use std::fmt::{self, Debug, Display};
 use std::sync::Arc;
 
@@ -463,12 +463,15 @@ where
     L: Language,
     N: Analysis<L>,
 {
-    fn check(&self, egraph: &mut EGraph<L, N>, _eclass: Id, subst: &Subst) -> bool {
+    fn check(&self, _egraph: &mut EGraph<L, N>, _eclass: Id, _subst: &Subst) -> bool {
+        panic!("TODO: here we should not use apply_pat, but a variant of apply_pat that does not add new terms");
+        /*
         let mut id_buf_1 = vec![0.into(); self.p1.ast.as_ref().len()];
         let mut id_buf_2 = vec![0.into(); self.p2.ast.as_ref().len()];
         let a1 = apply_pat(&mut id_buf_1, self.p1.ast.as_ref(), egraph, subst);
         let a2 = apply_pat(&mut id_buf_2, self.p2.ast.as_ref(), egraph, subst);
         a1 == a2
+        */
     }
 
     fn vars(&self) -> Vec<Var> {

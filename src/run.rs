@@ -536,17 +536,19 @@ where
 
         let start_time = Instant::now();
 
-        let subterm_map: HashMap<Id, HashSet<Id>> = self.egraph.subterm_map(); // only compute once per iteration
+        //let subterm_map: HashMap<Id, HashSet<Id>> = self.egraph.subterm_map(); // only compute once per iteration
         let mut matches = Vec::new();
         result = result.and_then(|_| {
             rules.iter().try_for_each(|rule| {
-                let mut ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
+                let /*mut*/ ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
+                /*
                 let pat_ast = rule.searcher.get_pattern_ast().unwrap();
                 for search_matches in ms.iter_mut() {
                     println!("Length before: {}", search_matches.substs.len());
                     search_matches.substs.retain(|s| pat_ast.nonloopy(s, &self.egraph, &subterm_map)); // in-place filter
                     println!("Length after shrinking: {}", search_matches.substs.len());
                 }
+                */
                 matches.push(ms);
                 self.check_limits()
             })
