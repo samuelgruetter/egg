@@ -18,10 +18,11 @@ pub fn print_eclasses<L: Language + std::fmt::Display, N: Analysis<L>>(eg: &EGra
                 let (_best_cost, best) = extractor.find_best(*child);
                 s.push_str(&format!(" {}", best));
             }
+            let ffn = &eg.ffn_of_enode(node).unwrap();
             if node.children().is_empty() {
-                println!("- {s}");
+                println!("- [{ffn}] {s}");
             } else {
-                println!("- ({s})");
+                println!("- [{ffn}] ({s})");
             }
         }
     }

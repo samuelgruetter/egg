@@ -21,10 +21,11 @@ fn simplify<'a>(rules: Vec<Rewrite<SimpleLanguage, ()>>, s: &str, extra_s : Vec<
     }).collect();
     let mut runner = Runner::default()
         .with_explanations_enabled()
-        .with_node_limit(50)
+        //.with_node_limit(50)
         //.with_iter_limit(2)
         .with_expr(&expr)
         .with_exprs(extra_exprs.iter().map(|x| &*x).collect())
+        .with_hook(|r| Ok(print_eclasses(&r.egraph)))
         .run(&rules);
     // the Runner knows which e-class the expression given with `with_expr` is in
     let root = runner.roots[0];

@@ -542,7 +542,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         if let Some(ffn_ptr) = self.farfetchedness.get_mut(&id) {
             *ffn_ptr = ffn_min(ffn, *ffn_ptr);
         } else {
-            println!("Enode {id} has far-fetched-ness {ffn}");
+            //println!("Enode {id} has far-fetched-ness {ffn}");
             self.farfetchedness.insert(id, ffn);
         }
         id
@@ -632,6 +632,15 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         equiv_eclasses
     }
 
+    /// Returns the far-fetched-ness of an enode
+    pub fn ffn_of_enode(&self, enode: &L) -> Option<&Ffn> {
+        if let Some(id) = self.lookup_internal(enode.clone()) {
+            self.farfetchedness.get(&id)
+        } else {
+            None
+        }
+    }
+
     /// TODO later, this function could take a rule name,
     /// or cost derived from a rule name
     pub fn increase_ffn(&self, a: Ffn) -> Option<Ffn> {
@@ -640,9 +649,13 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     fn min_ffn_of_class(&self, eclass_id: Id) -> Ffn {
         let mut current_min = ffn_infinity();
-        for enode in self.classes.get(&eclass_id).unwrap().nodes.iter() {
-            let enode_id = self.memo.get(enode).unwrap();
-            current_min = ffn_min(current_min, *self.farfetchedness.get(enode_id).unwrap());
+        if let Some(eclass) = self.classes.get(&eclass_id) {
+            for enode in eclass.nodes.iter() {
+                let enode_id = self.memo.get(enode).unwrap();
+                current_min = ffn_min(current_min, *self.farfetchedness.get(enode_id).unwrap());
+            }
+        } else {
+            panic!("eclass_id {} not found", eclass_id);
         }
         return current_min;
     }
@@ -657,15 +670,18 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         for node in nodes {
             match node {
                 ENodeOrVar::Var(var) => {
-                    let id = subst[*var];
+                    let id_0 = subst[*var];
+                    let id = self.find(id_0);
+                    // This seems to happen indeed *if* we run this function on a dirty (ie non-rebuilt) egraph:
+                    // if id_0 != id { println!("Note: id {id_0} in subst was not canonical, its canonical id is {id}"); }
                     instantiated_ids.push(id);
                     current_max = ffn_max(current_max, self.min_ffn_of_class(id));
                 }
                 ENodeOrVar::ENode(node) => {
                     let instantiated_node = node.clone().map_children(|i| instantiated_ids[usize::from(i)]);
-                    let id = self.lookup_internal(instantiated_node).unwrap();
-                    instantiated_ids.push(id);
-                    current_max = ffn_max(current_max, *self.farfetchedness.get(&id).unwrap());
+                    let id_noncanonical = self.lookup_internal(instantiated_node).unwrap();
+                    instantiated_ids.push(self.find(id_noncanonical));
+                    current_max = ffn_max(current_max, *self.farfetchedness.get(&id_noncanonical).unwrap());
                 }
             }
         }
