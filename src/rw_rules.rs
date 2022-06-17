@@ -110,6 +110,7 @@ pub fn get_lemma_arity(name: &str) -> Option<usize> {
 pub fn run_simplifier(f_simplify : fn(&str, Vec<&str>) -> (), f_prove : fn(&str, &str, Vec<&str>) -> ()) {
   let st : &str = "(Z.lt (unsigned (wsub (wadd x1 (wslu (wsru (wsub x2 x1) (ZToWord 4)) (ZToWord 3))) x1)) (Z.mul (unsigned (ZToWord 8)) (Z.of_nat (@length word x))))";
   let es = vec![
+    //"(ZToWord 0)", // allows decreasing far-fetchedness limit from 4 to 3
     "(Z.le 0 (Z.pow 2 3))",
     "True",
     "(Z.lt (Z.pow 2 3) (Z.pow 2 4))",

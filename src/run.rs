@@ -155,6 +155,7 @@ pub struct Runner<L: Language, N: Analysis<L>, IterData = ()> {
     iter_limit: usize,
     node_limit: usize,
     time_limit: Duration,
+    ffn_limit: Ffn,
 
     start_time: Option<Instant>,
     scheduler: Box<dyn RewriteScheduler<L, N>>,
@@ -187,6 +188,7 @@ where
             iter_limit,
             node_limit,
             time_limit,
+            ffn_limit,
             start_time,
             scheduler: _,
         } = self;
@@ -200,6 +202,7 @@ where
             .field("iter_limit", iter_limit)
             .field("node_limit", node_limit)
             .field("time_limit", time_limit)
+            .field("ffn_limit",  ffn_limit)
             .field("start_time", start_time)
             .field("scheduler", &format_args!("<dyn RewriteScheduler ..>"))
             .finish()
@@ -317,6 +320,7 @@ where
             iter_limit: 30,
             node_limit: 10_000,
             time_limit: Duration::from_secs(5),
+            ffn_limit: 2,
 
             egraph: EGraph::new(analysis),
             roots: vec![],
@@ -342,6 +346,11 @@ where
     /// Sets the runner time limit. Default: 5 seconds
     pub fn with_time_limit(self, time_limit: Duration) -> Self {
         Self { time_limit, ..self }
+    }
+
+    /// Sets the maximum tolerable far-fetched-ness value for newly added terms
+    pub fn with_ffn_limit(self, ffn_limit: Ffn) -> Self {
+        Self { ffn_limit, ..self }
     }
 
     /// Add a hook to instrument or modify the behavior of a [`Runner`].
@@ -536,19 +545,16 @@ where
 
         let start_time = Instant::now();
 
-        //let subterm_map: HashMap<Id, HashSet<Id>> = self.egraph.subterm_map(); // only compute once per iteration
         let mut matches = Vec::new();
         result = result.and_then(|_| {
             rules.iter().try_for_each(|rule| {
-                let /*mut*/ ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
-                /*
-                let pat_ast = rule.searcher.get_pattern_ast().unwrap();
+                println!("Rule {}:", rule.name);
+                let mut ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
                 for search_matches in ms.iter_mut() {
-                    println!("Length before: {}", search_matches.substs.len());
-                    search_matches.substs.retain(|s| pat_ast.nonloopy(s, &self.egraph, &subterm_map)); // in-place filter
-                    println!("Length after shrinking: {}", search_matches.substs.len());
+                    print!("Length before: {}, ", search_matches.substs.len());
+                    search_matches.compute_and_filter_ffns(&self.egraph, self.ffn_limit);
+                    println!("length after shrinking: {}", search_matches.substs.len());
                 }
-                */
                 matches.push(ms);
                 self.check_limits()
             })

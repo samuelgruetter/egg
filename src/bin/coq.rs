@@ -118,6 +118,7 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
         .with_explanations_enabled()
         .with_node_limit(1000)
         .with_expr(&expr)
+        .with_ffn_limit(4)
         .with_exprs(extra_exprs.iter().map(|x| &*x).collect())
         .run(&make_rules());
     // the Runner knows which e-class the expression given with `with_expr` is in

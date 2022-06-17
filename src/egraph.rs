@@ -20,8 +20,13 @@ pub fn ffn_min(a: Ffn, b: Ffn) -> Ffn {
     u8::min(a, b)
 }
 
+#[allow(missing_docs)]
 pub fn ffn_zero() -> Ffn {
     0
+}
+
+pub fn ffn_increase(a: Ffn) -> Ffn {
+    a + 1
 }
 
 pub fn ffn_infinity() -> Ffn {
@@ -113,9 +118,6 @@ pub struct EGraph<L: Language, N: Analysis<L>> {
     ///   instantiated searcher (lhs) pattern plus the cost of the rule, which currently equals
     ///   1 for all rules.
     pub farfetchedness: HashMap<Id, Ffn>,
-
-    /// Max allowed far-fetched-ness (enodes may have this value, but patterns with this value don't trigger any more)
-    pub ffn_limit: Ffn,
 }
 
 #[cfg(feature = "serde-1")]
@@ -153,7 +155,6 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
             analysis_pending: Default::default(),
             classes_by_op: Default::default(),
             farfetchedness: Default::default(),
-            ffn_limit: 2, // TODO make configurable
         }
     }
 
@@ -641,12 +642,6 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         }
     }
 
-    /// TODO later, this function could take a rule name,
-    /// or cost derived from a rule name
-    pub fn increase_ffn(&self, a: Ffn) -> Option<Ffn> {
-        if a < self.ffn_limit { Some(a + 1) } else { None }
-    }
-
     fn min_ffn_of_class(&self, eclass_id: Id) -> Ffn {
         let mut current_min = ffn_infinity();
         if let Some(eclass) = self.classes.get(&eclass_id) {
@@ -702,21 +697,18 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         to_pat: &PatternAst<L>,
         subst: &Subst,
         rule_name: impl Into<Symbol>,
+        ffn: Ffn
     ) -> (Id, bool) {
-        let id1 = self.add_instantiation_internal(from_pat, subst, ffn_zero()); // TODO why is this not just a lookup?
-        let mut did_union = false;
-        if let Some(ffn) = self.increase_ffn(self.max_ffn_of_instantiated_pattern(from_pat, subst)) {
-            let size_before = self.unionfind.size();
-            let id2 = self.add_instantiation_internal(to_pat, subst, ffn);
-            let rhs_new = self.unionfind.size() > size_before;
-
-            did_union = self.perform_union(
-                id1,
-                id2,
-                Some(Justification::Rule(rule_name.into())),
-                rhs_new,
-            );
-        }
+        let id1 = self.add_instantiation_internal(from_pat, subst, ffn); // TODO why is this not just a lookup?
+        let size_before = self.unionfind.size();
+        let id2 = self.add_instantiation_internal(to_pat, subst, ffn);
+        let rhs_new = self.unionfind.size() > size_before;
+        let did_union = self.perform_union(
+            id1,
+            id2,
+            Some(Justification::Rule(rule_name.into())),
+            rhs_new,
+        );
         (self.find(id1), did_union)
     }
 
@@ -1104,6 +1096,7 @@ mod tests {
             &"y".parse().unwrap(),
             &Default::default(),
             "union x and y".to_string(),
+            ffn_zero()
         );
         egraph.rebuild();
     }

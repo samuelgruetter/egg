@@ -114,9 +114,11 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for MultiPattern<L> {
         } else {
             let (_var,ast_aux) = &self.asts.last().unwrap();
             let ast = Some(Cow::Borrowed(ast_aux));
+            let ffns = vec![];
             Some(SearchMatches {
                 eclass,
                 substs,
+                ffns,
                 ast,
             })
         }
@@ -146,6 +148,7 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
         _subst: &Subst,
         _searcher_ast: Option<&PatternAst<L>>,
         _rule_name: Symbol,
+        _ffn: egraph::Ffn,
     ) -> Vec<Id> {
         panic!("Multipatterns do not support apply_one")
     }
@@ -160,20 +163,17 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
         // the ids returned are kinda garbage
         let mut added = vec![];
         for mat in matches {
-            let from_pat: &PatternAst<L> = mat.ast.as_ref().unwrap().as_ref();
-            for subst in &mat.substs {
+            for (subst, ffn) in mat.substs.iter().zip(mat.ffns.iter()) {
                 let mut subst = subst.clone();
                 let mut id_buf = vec![];
                 for (i, (v, p)) in self.asts.iter().enumerate() {
                     id_buf.resize(p.as_ref().len(), 0.into());
-                    if let Some(ffn) = egraph.increase_ffn(egraph.max_ffn_of_instantiated_pattern(from_pat, &subst)) {
-                        let id1 = crate::pattern::apply_pat(&mut id_buf, p.as_ref(), egraph, &subst, ffn);
-                        if let Some(id2) = subst.insert(*v, id1) {
-                            egraph.union(id1, id2);
-                        }
-                        if i == 0 {
-                            added.push(id1)
-                        }
+                    let id1 = crate::pattern::apply_pat(&mut id_buf, p.as_ref(), egraph, &subst, *ffn);
+                    if let Some(id2) = subst.insert(*v, id1) {
+                        egraph.union(id1, id2);
+                    }
+                    if i == 0 {
+                        added.push(id1)
                     }
                 }
             }

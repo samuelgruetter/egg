@@ -287,8 +287,8 @@ where
             } else {
                 None
             };
-            for subst in &mat.substs {
-                let ids = self.apply_one(egraph, mat.eclass, subst, ast, rule_name);
+            for (subst, ffn) in mat.substs.iter().zip(mat.ffns.iter()) {
+                let ids = self.apply_one(egraph, mat.eclass, subst, ast, rule_name, *ffn);
                 added.extend(ids)
             }
         }
@@ -319,6 +319,7 @@ where
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
+        ffn: egraph::Ffn,
     ) -> Vec<Id>;
 
     /// Returns a list of variables that this Applier assumes are bound.
@@ -369,10 +370,11 @@ where
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
+        ffn: egraph::Ffn,
     ) -> Vec<Id> {
         if self.condition.check(egraph, eclass, subst) {
             self.applier
-                .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
+                .apply_one(egraph, eclass, subst, searcher_ast, rule_name, ffn)
         } else {
             vec![]
         }
@@ -519,6 +521,7 @@ mod tests {
             &"TRUE".parse().unwrap(),
             &Default::default(),
             "direct-union".to_string(),
+            egraph::ffn_zero(),
         );
 
         println!("Should fire now");
@@ -554,6 +557,7 @@ mod tests {
                 subst: &Subst,
                 searcher_ast: Option<&PatternAst<SymbolLang>>,
                 rule_name: Symbol,
+                ffn: egraph::Ffn,
             ) -> Vec<Id> {
                 let a: Var = "?a".parse().unwrap();
                 let b: Var = "?b".parse().unwrap();
@@ -566,6 +570,7 @@ mod tests {
                         &PatternAst::from_str(&s).unwrap(),
                         subst,
                         rule_name,
+                        ffn
                     );
                     if did_something {
                         vec![id]
