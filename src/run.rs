@@ -548,12 +548,12 @@ where
         let mut matches = Vec::new();
         result = result.and_then(|_| {
             rules.iter().try_for_each(|rule| {
-                println!("Rule {}:", rule.name);
+                //println!("Rule {}:", rule.name);
                 let mut ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
                 for search_matches in ms.iter_mut() {
-                    print!("Length before: {}, ", search_matches.substs.len());
+                    //print!("Length before: {}, ", search_matches.substs.len());
                     search_matches.compute_and_filter_ffns(&self.egraph, self.ffn_limit);
-                    println!("length after shrinking: {}", search_matches.substs.len());
+                    //println!("length after shrinking: {}", search_matches.substs.len());
                 }
                 matches.push(ms);
                 self.check_limits()

@@ -129,7 +129,7 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
     let (best_cost, best) = extractor.find_best(root);
     
     print_eclasses(&runner.egraph);
-    why_exists(&mut runner, "(wadd x1 x1)");
+    // why_exists(&mut runner, "(@word.add 64 word x1 x1)");
 
     let explanations = runner.explain_equivalence(&expr, &best).get_flat_sexps();
     let mut explanation = explanations.iter();
