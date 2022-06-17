@@ -1,5 +1,7 @@
 use egg::*;
 use symbolic_expressions::*;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 
 fn main() {
     env_logger::init();
@@ -10,15 +12,15 @@ fn main() {
 
 fn holify_aux(e: &Sexp) -> Sexp {
     match e {
-        Sexp::String(s) => return Sexp::String(s.replace("AT", "@").replace("DOT", ".")),
-        Sexp::Empty => return Sexp::Empty,
+        Sexp::String(s) => Sexp::String(s.replace("AT", "@").replace("DOT", ".")),
+        Sexp::Empty => Sexp::Empty,
         Sexp::List(l) => {
             if l[0] == Sexp::String("Rewrite=>".to_string()) {
-                return Sexp::String("hole".to_string());
+                Sexp::String("hole".to_string())
             } else if l[0] == Sexp::String("Rewrite<=".to_string()) {
-                return Sexp::String("hole".to_string());
+                Sexp::String("hole".to_string())
             } else {
-                return Sexp::List(l.iter().map(holify_aux).collect());
+                Sexp::List(l.iter().map(holify_aux).collect())
             }
         }
     }
@@ -39,10 +41,20 @@ fn lemma_arity(s: &str) -> usize {
 fn add_arity_th_name(e: &Sexp) -> Sexp {
     match e {
         Sexp::String(s) => {
-            let number = lemma_arity(s);
-            if number == 0 {
-                    return Sexp::String(s.clone().replace("-rev", ""));
+            // let-bound variables in context like "x := rhs : T"
+            // were transformed into are rule named x$def saying "x => rhs", and will
+            // now be translated back to (@eq_refl _ x)
+            if s.ends_with("$def") {
+                Sexp::List(vec![
+                    Sexp::String("@eq_refl".to_string()),
+                    Sexp::String("_".to_string()),
+                    Sexp::String(s[..s.len()-4].to_string()),
+                ])
             } else {
+                let number = lemma_arity(s);
+                if number == 0 {
+                    Sexp::String(s.clone().replace("-rev", ""))
+                } else {
                     let mut v = vec![e.clone()];
                     let arg_implicit_aux = ["_"].repeat(number);
                     let arg_implicit = arg_implicit_aux
@@ -50,55 +62,58 @@ fn add_arity_th_name(e: &Sexp) -> Sexp {
                         .map(|s| Sexp::String(s.to_string()))
                         .collect::<Vec<_>>();
                     v.extend(arg_implicit);
-                    return Sexp::List(v.clone());
+                    Sexp::List(v.clone())
+                }
             }
         }
         _ => {
-            panic!("unexpected empty");
+            panic!("not Sexp::String");
         }
     }
 }
-fn find_rw(e: &Sexp) -> Option<(bool, Sexp, Sexp)> {
+
+fn find_rw(e: &Sexp) -> Option<(bool, String, Sexp, Sexp)> {
     match e {
         Sexp::String(_s) => return None,
         Sexp::Empty => return None,
         Sexp::List(l) => {
-            if l[0] == Sexp::String("Rewrite=>".to_string()) {
-                match &l[1] {
-                    Sexp::String(s) => {
-                        if s.contains("-rev") {
-                            return Some((true, add_arity_th_name(&l[1]), l[2].clone()));
-                        } else {
-                            return Some((false, add_arity_th_name(&l[1]), l[2].clone()));
-                        }
-                    }
-                    _ => {
-                        panic!("Absurd")
-                    }
-                }
-            } else if l[0] == Sexp::String("Rewrite<=".to_string()) {
-                return Some((true, add_arity_th_name(&l[1]), l[2].clone()));
-            } else {
-                for i in l.iter() {
-                    match find_rw(i) {
-                        None => {}
-                        Some(a) => {
-                            return Some(a);
+            match &l[0] {
+                Sexp::String(op) => {
+                    if op.starts_with("Rewrite") {
+                        let fw1 = op.starts_with("Rewrite=>");
+                        match &l[1] {
+                            Sexp::String(s) => {
+                                let fw2 = !s.contains("-rev");
+                                let fw = fw1 ^ fw2;
+                                return Some((fw, s.to_string(), add_arity_th_name(&l[1]), l[2].clone()))
+                            }
+                            _ => { panic!("Expected rule name after Rewrite") }
                         }
                     }
                 }
-                return None;
+                _ => ()
             }
+            // only executed if we have not yet returned:
+            for i in l.iter() {
+                match find_rw(i) {
+                    None => {}
+                    Some(a) => {
+                        return Some(a);
+                    }
+                }
+            }
+            return None;
         }
     }
 }
-fn holify(e: &Sexp) -> (Sexp, bool, Sexp, Sexp) {
+
+fn holify(e: &Sexp) -> (Sexp, bool, String, Sexp, Sexp) {
     match find_rw(e) {
         None => {
             panic!("There is no rewrite in the sexp")
         }
-        Some((a, b, c)) => {
-            return (holify_aux(e), a, b, holify_aux(&c));
+        Some((fw, name_th, applied_th, new)) => {
+            return (holify_aux(e), fw, name_th, applied_th, holify_aux(&new));
         }
     }
 }
@@ -132,20 +147,47 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
     // why_exists(&mut runner, "(@word.add 64 word x1 x1)");
 
     let explanations = runner.explain_equivalence(&expr, &best).get_flat_sexps();
+    println!("Explanation length: {}", explanations.len());
+
+    let path = get_proof_file_path();
+    let f = File::create(path).expect("unable to create file");
+    let mut writer = BufWriter::new(f);
+
     let mut explanation = explanations.iter();
     explanation.next();
+    writeln!(writer, "unshelve (");
     for exp in explanation {
-        let (holified, fw, name_th, new) = holify(exp);
-        // println!("{}", exp.to_string());
+        let (holified, fw, name_th, applied_th, new) = holify(exp);
         let rw_lemma = if fw { "@rew_zoom_fw" } else { "@rew_zoom_bw" };
-        println!("(eapply ({rw_lemma} _ {new} _  {name_th} (fun hole => {holified})) || ");
-        println!("eapply ({rw_lemma} _ {new} _  (prove_True_eq _ {name_th}) (fun hole => {holified})));");
+        let th = if is_eq(&name_th.to_string()).unwrap() { 
+            format!("{applied_th}")
+        } else { 
+            format!("(prove_True_eq _ {applied_th})") 
+        };
+        writeln!(writer, "eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified}));");
     }
-    println!("idtac.");
+    writeln!(writer, "idtac).");
+    writer.flush().expect("error flushing");
+    println!("Wrote proof to {path}");
 
     println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
     println!("Stop reason: {:?}", runner.stop_reason);
 }
+
+/* too hard to satisfy typechecker
+fn write_explanation<W: Write>(&mut writer: &BufWriter<W>, explanations: &Vec<symbolic_expressions::Sexp>) -> () {
+    let mut explanation = explanations.iter();
+    explanation.next();
+    writeln!(writer, "unshelve (");
+    for exp in explanation {
+        let (holified, fw, name_th, new) = holify(exp);
+        let rw_lemma = if fw { "@rew_zoom_fw" } else { "@rew_zoom_bw" };
+        writeln!(writer, "(eapply ({rw_lemma} _ {new} _  {name_th} (fun hole => {holified})) || ");
+        writeln!(writer, "eapply ({rw_lemma} _ {new} _  (prove_True_eq _ {name_th}) (fun hole => {holified})));");
+    }
+    writeln!(writer, "idtac).");
+}
+*/
 
 #[allow(dead_code)]
 fn prove(s_l: &str, s_r: &str, extra_exprs: Vec<&str>) -> () {
