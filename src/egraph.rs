@@ -243,8 +243,13 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     /// flattened form. Each of these also has a s-expression string representation,
     /// given by [`get_flat_string`](Explanation::get_flat_string) and [`get_string`](Explanation::get_string).
     pub fn explain_equivalence(&mut self, left: &RecExpr<L>, right: &RecExpr<L>) -> Explanation<L> {
-        let left = self.lookup_expr(left).expect("left expr not found, use add_expr before calling explain_equivalence");
-        let right = self.lookup_expr(right).expect("right expr not found, use add_expr before calling explain_equivalence");
+        // NOTE: explanations don't work any more if we use lookup_expr instead of add_expr_internal,
+        // because then left and right are immediately considered equal
+        // let left = self.lookup_expr(left).expect("left expr not found, use add_expr before calling explain_equivalence");
+        // let right = self.lookup_expr(right).expect("right expr not found, use add_expr before calling explain_equivalence");
+        // TODO this should not require an ffn value!
+        let left = self.add_expr_internal(left, ffn_zero());
+        let right = self.add_expr_internal(right, ffn_zero());
         if let Some(explain) = &mut self.explain {
             explain.explain_equivalence(left, right)
         } else {

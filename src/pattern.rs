@@ -264,6 +264,7 @@ impl<'a, L: Language> SearchMatches<'a, L> {
     /// Filter the substs to contain only those that don't create too far-fetched terms,
     /// and record the far-fetchedness of each term in ffns.
     pub fn compute_and_filter_ffns<N: Analysis<L>>(&mut self, egraph: &EGraph<L, N>, max_ffn: Ffn) {
+        //self.ffns.resize(self.substs.len(), 0); // <-- to disable ffn restrictions
         let all_substs = self.substs.clone();
         self.substs.clear();
         let from_pat = self.ast.as_ref().unwrap();
