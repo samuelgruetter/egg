@@ -98,14 +98,6 @@ impl<L: Language> PatternAst<L> {
 
         new
     }
-
-    /// Checks that the expression obtained by instantiating `pat` with `subst` c does 
-    /// not contain any subterm that is in the same eclass as one of its ancestors.
-    pub fn nonloopy<A: Analysis<L>>(&self, subst: &Subst, egraph: &EGraph<L, A>, subterm_map: &HashMap<Id, HashSet<Id>>) -> bool {
-        let b = nonloopy_rec(self.as_ref(), subst, egraph, subterm_map).is_some();
-        println!("nonloopy: {b}");
-        return b;
-    }
 }
 
 impl<L: Language> Pattern<L> {
@@ -285,61 +277,6 @@ impl<'a, L: Language> SearchMatches<'a, L> {
     }
 }
 
-
-/// Checks that the expression obtained by instantiating `pat` with `subst` c does 
-/// not contain any subterm that is in the same eclass as one of its ancestors.
-/// Returns `(Some (eclass id of pat after applying substitution, set of used eclass ids))`,
-/// if the test passes, None otherwise.
-/// The HashSets are mutable, but each function only mutates the one set that it
-/// creates and returns.
-fn nonloopy_rec<L: Language, A: Analysis<L>>(pat: &[ENodeOrVar<L>], subst: &Subst, 
-    egraph: &EGraph<L, A>, subterm_map: &HashMap<Id, HashSet<Id>>) -> Option<(Id, HashSet<Id>)> 
-{
-    // both mutable in the sense that we modify its contents
-    // and that we reassign the variable to an entirely new set
-    let mut used_eclasses: HashSet<Id> = HashSet::default();
-    match pat.last().unwrap() {
-        ENodeOrVar::ENode(pattern_node) => {
-            let mut loopy = false;
-            let mut instantiated_node = pattern_node.clone();
-            instantiated_node.for_each_mut(|child_ptr| {
-                // at the beginning of the lambda, child_ptr points to an Id that indexes
-                // into the pat slice, and at the end of the lambda, child_ptr points to
-                // an Id that refers to an eclass id, and instantiated_note is not a pattern
-                // any more, but an enode
-                let i = usize::from(*child_ptr) + 1;
-                let child: &[ENodeOrVar<L>] = &pat[..i];
-                match nonloopy_rec(child, subst, egraph, subterm_map) {
-                    Some((eid_child, u_child)) => {
-                        // TODO calling collect each time causes runtime to be quadratic 
-                        used_eclasses = used_eclasses.union(&u_child).map(|id| *id).collect();
-                        *child_ptr = eid_child;
-                    }
-                    None => {
-                        loopy = true;
-                    }
-                }
-            });
-            if loopy { 
-                None
-            } else {
-                let eid: Id = egraph.lookup(instantiated_node).unwrap();
-                if used_eclasses.contains(&eid) {
-                    None // loop detected
-                } else {
-                    used_eclasses.insert(eid);
-                    Some((eid, used_eclasses))
-                }
-            }
-        }
-        ENodeOrVar::Var(x) => { 
-            let eid = *subst.get(*x).unwrap();
-            used_eclasses = subterm_map.get(&eid).unwrap().clone();
-            Some((eid, used_eclasses))
-        }
-    }
-}
-
 impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
     fn get_pattern_ast(&self) -> Option<&PatternAst<L>> {
         Some(&self.ast)
@@ -366,8 +303,7 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
     }
 
     fn search_eclass(&self, egraph: &EGraph<L, A>, eclass: Id) -> Option<SearchMatches<L>> {
-        let /*mut*/ substs = self.program.run(egraph, eclass);
-        //substs.retain(|s| nonloopy(&self.ast, s, egraph)); // in-place filter
+        let substs = self.program.run(egraph, eclass);
         if substs.is_empty() {
             None
         } else {
