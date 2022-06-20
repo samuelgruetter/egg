@@ -34,6 +34,7 @@ mod macros;
 
 pub mod tutorials;
 
+mod coqlib;
 mod dot;
 mod eclass;
 mod egraph;
@@ -87,6 +88,7 @@ impl std::fmt::Display for Id {
 pub(crate) use {explain::Explain, explain::Justification, unionfind::UnionFind};
 
 pub use {
+    coqlib::*,
     dot::Dot,
     eclass::EClass,
     egraph::{EGraph, Ffn, ffn_zero},

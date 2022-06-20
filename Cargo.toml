@@ -12,6 +12,11 @@ categories = ["data-structures"]
 [[bin]]
 name = "coq"
 test = false
+
+[[bin]]
+name = "coquetier"
+test = false
+
 [dependencies]
 symbolic_expressions = "5.0.3"
 log = "0.4.17"

@@ -1,14 +1,7 @@
-use egg::*;
+use crate::*;
 use symbolic_expressions::*;
 use std::fs::File;
 use std::io::{BufWriter, Write};
-
-fn main() {
-    env_logger::init();
-    run_simplifier(simplify, prove);
-    // run_simplifier(simplify);
-    // simplify("(wadd x y)");
-}
 
 fn holify_aux(e: &Sexp) -> Sexp {
     match e {
@@ -120,7 +113,7 @@ fn holify(e: &Sexp) -> (Sexp, bool, String, Sexp, Sexp) {
 
 /// parse an expression, simplify it using egg, and pretty print it back out
 #[allow(dead_code, unused_must_use)]
-fn simplify(s: &str, extra_s : Vec<&str>) -> () {
+pub fn simplify(s: &str, extra_s : Vec<&str>) -> () {
     // parse the expression, the type annotation tells it which Language to use
     let expr: RecExpr<CoqSimpleLanguage> = s.parse().unwrap();
     // let expr: RecExpr<SymbolLang> = s.parse().unwrap();
@@ -189,8 +182,8 @@ fn write_explanation<W: Write>(&mut writer: &BufWriter<W>, explanations: &Vec<sy
 }
 */
 
-#[allow(dead_code)]
-fn prove(s_l: &str, s_r: &str, extra_exprs: Vec<&str>) -> () {
+#[allow(dead_code, missing_docs)]
+pub fn prove(s_l: &str, s_r: &str, extra_exprs: Vec<&str>) -> () {
     // parse the expression, the type annotation tells it which Language to use
     let expr_l: RecExpr<CoqSimpleLanguage> = s_l.parse().unwrap();
     // let expr_l: RecExpr<SymbolLang> = s_l.parse().unwrap();
