@@ -118,6 +118,49 @@ fn holify(e: &Sexp) -> (Sexp, bool, String, Sexp, Sexp) {
     }
 }
 
+//  Return two terms that staret with distinct constructors but are in the same eclass
+fn find_distinct_ctor_equals<L: Language + std::fmt::Display, N: Analysis<L>>(eg: &EGraph<L, N>) -> Option<(String, String)> {
+
+    let extractor = Extractor::new(eg, AstSize);
+    let classes : Vec<&EClass<L, _>> = eg.classes().collect();
+    for class in classes {
+        let mut last_ctor_seen : Option<(String, String)> = None;
+        for node in class.nodes.iter() {
+            // The display() method implemented by define_language! macro happens to print only the op name
+            // TODO is there a cleaner way to obtain the op name?
+            let opname = format!("{}", node);
+            let (_arity, is_nonprop_ctor) = symbol_metadata(&opname).unwrap();
+            if is_nonprop_ctor {
+                match last_ctor_seen.clone() {
+                    Some((ctor1, children1)) => { 
+                        if !(ctor1 == opname) 
+                            {
+                                let mut s: String; 
+                                s = "".to_string();
+                                // Find representant for our children of ctor2
+                                for child in node.children().iter() {
+                                    let (_best_cost, best) = extractor.find_best(*child);
+                                    s.push_str (&format!(" {}", best))
+                                }
+                                return Some((format!("({} {})", ctor1, children1), format!("({} {})", opname, s)))}
+                        }
+                    None => { 
+                            let mut s: String; 
+                            s = "".to_string();
+                            // Find representant for our children of ctor2
+                            for child in node.children().iter() {
+                                let (_best_cost, best) = extractor.find_best(*child);
+                                s.push_str (&format!(" {}", best))
+                            }
+                            last_ctor_seen = Some((opname, s)); }
+                }
+            }
+        }
+    }
+    return None;
+
+}
+
 /// parse an expression, simplify it using egg, and pretty print it back out
 #[allow(dead_code, unused_must_use)]
 fn simplify(s: &str, extra_s : Vec<&str>) -> () {
@@ -133,44 +176,83 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
         .with_explanations_enabled()
         .with_node_limit(1000)
         .with_expr(&expr)
-        .with_ffn_limit(4)
+        .with_ffn_limit(6)
         .with_exprs(extra_exprs.iter().map(|x| &*x).collect())
         .run(&make_rules());
     // the Runner knows which e-class the expression given with `with_expr` is in
     let root = runner.roots[0];
 
-    // use an Extractor to pick the best element of the root eclass
-    let extractor = Extractor::new(&runner.egraph, AstSize);
-    let (best_cost, best) = extractor.find_best(root);
-    
     print_eclasses(&runner.egraph);
-    // why_exists(&mut runner, "(@word.add 64 word x1 x1)");
+    //Try to figure out if we proved False (two nonprop constructors are within the same eclass)
+    match find_distinct_ctor_equals(&runner.egraph) {
+        Some((t1,t2)) => { 
+            // t1 t2 are provably equal to eachother when they should not be
+            println!("Contradiction: {} {}", t1, t2);
+            let path = get_proof_file_path();
+            let f = File::create(path).expect("unable to create file");
+            let mut writer = BufWriter::new(f);
+            writeln!(writer, "(* CONTRADICTION *)");
+            writeln!(writer, "assert ({} = {}) as ABSURDCASE.", t1, t2);
+            // Now print the proof that those two are equal
+            // Figure out exprt1 and exprt2 
+            let exprt1 : RecExpr<CoqSimpleLanguage>= t1.parse().unwrap();
+            let exprt2 : RecExpr<CoqSimpleLanguage>= t2.parse().unwrap();
+            // TODO cleanup to share this piece of code that is currently copy pasted nxt case.
+            let explanations = runner.explain_equivalence(&exprt1, &exprt2).get_flat_sexps();
+            println!("Explanation length: {}", explanations.len());
+            let mut explanation = explanations.iter();
+            explanation.next();
+            writeln!(writer, "unshelve (");
+            for exp in explanation {
+                let (holified, fw, name_th, applied_th, new) = holify(exp);
+                let rw_lemma = if fw { "@rew_zoom_fw" } else { "@rew_zoom_bw" };
+                let th = if is_eq(&name_th.to_string()).unwrap() { 
+                    format!("{applied_th}")
+                } else { 
+                    format!("(prove_True_eq _ {applied_th})") 
+                };
+                writeln!(writer, "eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified} = _));");
+            }
+            writeln!(writer, "idtac).");
+            writer.flush().expect("error flushing");
+            println!("Wrote proof to {path}");
+        }
+        None => {
+            // use an Extractor to pick the best element of the root eclass
+            let extractor = Extractor::new(&runner.egraph, AstSize);
+            let (best_cost, best) = extractor.find_best(root);
+                
+            // why_exists(&mut runner, "(@word.add 64 word x1 x1)");
 
-    let explanations = runner.explain_equivalence(&expr, &best).get_flat_sexps();
-    println!("Explanation length: {}", explanations.len());
+            let explanations = runner.explain_equivalence(&expr, &best).get_flat_sexps();
+            println!("Explanation length: {}", explanations.len());
 
-    let path = get_proof_file_path();
-    let f = File::create(path).expect("unable to create file");
-    let mut writer = BufWriter::new(f);
+            let path = get_proof_file_path();
+            let f = File::create(path).expect("unable to create file");
+            let mut writer = BufWriter::new(f);
 
-    let mut explanation = explanations.iter();
-    explanation.next();
-    writeln!(writer, "unshelve (");
-    for exp in explanation {
-        let (holified, fw, name_th, applied_th, new) = holify(exp);
-        let rw_lemma = if fw { "@rew_zoom_fw" } else { "@rew_zoom_bw" };
-        let th = if is_eq(&name_th.to_string()).unwrap() { 
-            format!("{applied_th}")
-        } else { 
-            format!("(prove_True_eq _ {applied_th})") 
-        };
-        writeln!(writer, "eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified}));");
+            let mut explanation = explanations.iter();
+            explanation.next();
+
+            writeln!(writer, "(* SIMPLIFICATION *)");
+            writeln!(writer, "unshelve (");
+            for exp in explanation {
+                let (holified, fw, name_th, applied_th, new) = holify(exp);
+                let rw_lemma = if fw { "@rew_zoom_fw" } else { "@rew_zoom_bw" };
+                let th = if is_eq(&name_th.to_string()).unwrap() { 
+                    format!("{applied_th}")
+                } else { 
+                    format!("(prove_True_eq _ {applied_th})") 
+                };
+                writeln!(writer, "eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified}));");
+            }
+            writeln!(writer, "idtac).");
+            writer.flush().expect("error flushing");
+            println!("Wrote proof to {path}");
+
+            println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
+        }
     }
-    writeln!(writer, "idtac).");
-    writer.flush().expect("error flushing");
-    println!("Wrote proof to {path}");
-
-    println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
     println!("Stop reason: {:?}", runner.stop_reason);
 }
 
