@@ -12,10 +12,12 @@ use log::*;
 /// Far-fetched-ness values
 pub type Ffn = u8;
 
+#[allow(missing_docs)]
 pub fn ffn_max(a: Ffn, b: Ffn) -> Ffn {
     u8::max(a, b)
 }
 
+#[allow(missing_docs)]
 pub fn ffn_min(a: Ffn, b: Ffn) -> Ffn {
     u8::min(a, b)
 }
@@ -25,10 +27,12 @@ pub fn ffn_zero() -> Ffn {
     0
 }
 
+#[allow(missing_docs)]
 pub fn ffn_increase(a: Ffn) -> Ffn {
     a + 1
 }
 
+#[allow(missing_docs)]
 pub fn ffn_infinity() -> Ffn {
     255
 }

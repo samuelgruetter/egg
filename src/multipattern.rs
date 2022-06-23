@@ -107,6 +107,15 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for MultiPattern<L> {
         let (_var,ast_aux) = &self.asts.last().unwrap();
         Some(ast_aux)
     }
+
+    fn ffn_of_subst(&self, egraph: &EGraph<L, A>, subst: &Subst) -> Ffn {
+        let mut current_max = ffn_zero();
+        for (_patname, pat) in self.asts.iter() {
+            current_max = ffn_max(current_max, egraph.max_ffn_of_instantiated_pattern(&pat, &subst));
+        }
+        current_max
+    }
+
     fn search_eclass(&self, egraph: &EGraph<L, A>, eclass: Id) -> Option<SearchMatches<L>> {
         let substs = self.program.run(egraph, eclass);
         if substs.is_empty() {

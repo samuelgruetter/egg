@@ -130,6 +130,9 @@ where
     /// This should not return a SearchMatches with no substs.
     fn search_eclass(&self, egraph: &EGraph<L, N>, eclass: Id) -> Option<SearchMatches<L>>;
 
+    /// Computes the far-fetchedness of this pattern when instantiated with `subst`
+    fn ffn_of_subst(&self, egraph: &EGraph<L, N>, subst: &Subst) -> Ffn;
+
     /// Search the whole [`EGraph`], returning a list of all the
     /// [`SearchMatches`] where something was found.
     /// This just calls [`search_eclass`] on each eclass.

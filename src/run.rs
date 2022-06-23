@@ -552,7 +552,7 @@ where
                 let mut ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
                 for search_matches in ms.iter_mut() {
                     //print!("Length before: {}, ", search_matches.substs.len());
-                    search_matches.compute_and_filter_ffns(&self.egraph, self.ffn_limit);
+                    search_matches.compute_and_filter_ffns(&self.egraph, &rule.searcher, self.ffn_limit);
                     //println!("length after shrinking: {}", search_matches.substs.len());
                 }
                 matches.push(ms);

@@ -263,13 +263,17 @@ pub struct SearchMatches<'a, L: Language> {
 impl<'a, L: Language> SearchMatches<'a, L> {
     /// Filter the substs to contain only those that don't create too far-fetched terms,
     /// and record the far-fetchedness of each term in ffns.
-    pub fn compute_and_filter_ffns<N: Analysis<L>>(&mut self, egraph: &EGraph<L, N>, max_ffn: Ffn) {
+    pub fn compute_and_filter_ffns<N: Analysis<L>>(
+        &mut self, 
+        egraph: &EGraph<L, N>, 
+        searcher: &std::sync::Arc<dyn Searcher<L, N> + Sync + Send>,
+        max_ffn: Ffn
+    ) -> () {
         //self.ffns.resize(self.substs.len(), 0); // <-- to disable ffn restrictions
         let all_substs = self.substs.clone();
         self.substs.clear();
-        let from_pat = self.ast.as_ref().unwrap();
         for subst in all_substs {
-            let ffn = egraph::ffn_increase(egraph.max_ffn_of_instantiated_pattern(from_pat, &subst));
+            let ffn = ffn_increase(searcher.ffn_of_subst(&egraph, &subst));
             if ffn <= max_ffn {
                 self.substs.push(subst);
                 self.ffns.push(ffn);
@@ -281,6 +285,10 @@ impl<'a, L: Language> SearchMatches<'a, L> {
 impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
     fn get_pattern_ast(&self) -> Option<&PatternAst<L>> {
         Some(&self.ast)
+    }
+
+    fn ffn_of_subst(&self, egraph: &EGraph<L, A>, subst: &Subst) -> Ffn {
+        egraph.max_ffn_of_instantiated_pattern(&self.ast, &subst)
     }
 
     fn search(&self, egraph: &EGraph<L, A>) -> Vec<SearchMatches<L>> {
