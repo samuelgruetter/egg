@@ -160,6 +160,22 @@ fn find_distinct_ctor_equals<L: Language + std::fmt::Display, N: Analysis<L>>(eg
     return None;
 
 }
+struct MotivateTrue;
+impl CostFunction<CoqSimpleLanguage> for MotivateTrue{
+    type Cost = f64;
+    fn cost<C>(&mut self, enode: &CoqSimpleLanguage, mut costs: C) -> Self::Cost
+    where
+        C: FnMut(Id) -> Self::Cost
+    {
+
+    // "&True" = IDTrue([Id; 0]),
+        let op_cost = match enode {
+            CoqSimpleLanguage::IDTrue(_) => 1.0,
+            _ => 2.0
+        };
+        enode.fold(op_cost, |sum, id| sum + costs(id))
+    }
+}
 
 /// parse an expression, simplify it using egg, and pretty print it back out
 #[allow(dead_code, unused_must_use)]
@@ -219,7 +235,7 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
         }
         None => {
             // use an Extractor to pick the best element of the root eclass
-            let extractor = Extractor::new(&runner.egraph, AstSize);
+            let extractor = Extractor::new(&runner.egraph, MotivateTrue);
             let (best_cost, best) = extractor.find_best(root);
                 
             // why_exists(&mut runner, "(@word.add 64 word x1 x1)");
