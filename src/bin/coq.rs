@@ -167,7 +167,6 @@ impl CostFunction<CoqSimpleLanguage> for MotivateTrue{
     where
         C: FnMut(Id) -> Self::Cost
     {
-
     // "&True" = IDTrue([Id; 0]),
         let op_cost = match enode {
             CoqSimpleLanguage::IDTrue(_) => 1.0,
@@ -199,8 +198,18 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
     let root = runner.roots[0];
 
     print_eclasses(&runner.egraph);
-    //Try to figure out if we proved False (two nonprop constructors are within the same eclass)
-    match find_distinct_ctor_equals(&runner.egraph) {
+    let extractor = Extractor::new(&runner.egraph, MotivateTrue);
+    let (best_cost, best) = extractor.find_best(root);
+    let mut ctor_equals = None;
+
+    if best_cost != 1.0 {
+        // Only if we failed to simplify to True (only expression of cost equal to one)
+        // then check try to find an inconsistency. This allow us to use
+        // Coquetier to generate the proof of equality between the two distinct
+        // constructor int the environment that is inconsistent
+        ctor_equals = find_distinct_ctor_equals(&runner.egraph);
+    }
+    match &ctor_equals {
         Some((t1,t2)) => { 
             // t1 t2 are provably equal to eachother when they should not be
             println!("Contradiction: {} {}", t1, t2);
@@ -235,10 +244,8 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
         }
         None => {
             // use an Extractor to pick the best element of the root eclass
-            let extractor = Extractor::new(&runner.egraph, MotivateTrue);
-            let (best_cost, best) = extractor.find_best(root);
+
                 
-            // why_exists(&mut runner, "(@word.add 64 word x1 x1)");
 
             let explanations = runner.explain_equivalence(&expr, &best).get_flat_sexps();
             println!("Explanation length: {}", explanations.len());
