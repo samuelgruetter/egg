@@ -198,7 +198,7 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
     // the Runner knows which e-class the expression given with `with_expr` is in
     let root = runner.roots[0];
 
-    print_eclasses(&runner.egraph);
+    print_eclasses_to_file(&runner.egraph, "./coq_eclasses_log.txt");
     runner.print_report();
     let extractor = Extractor::new(&runner.egraph, MotivateTrue);
     let (best_cost, best) = extractor.find_best(root);

@@ -1,13 +1,19 @@
 #![allow(missing_docs)]
 use crate::*;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 
-pub fn print_eclasses<L: Language + std::fmt::Display, N: Analysis<L>>(eg: &EGraph<L, N>) -> () {
+#[allow(unused_must_use)]
+pub fn print_eclasses_to_writer<W: Write, L: Language + std::fmt::Display, N: Analysis<L>>(
+    eg: &EGraph<L, N>,
+    w: &mut W
+) -> () {
     let extractor = Extractor::new(eg, AstSize);
     let mut classes : Vec<&EClass<L, _>> = eg.classes().collect();
     classes.sort_by(|a, b| a.id.cmp(&b.id));
     for class in classes {
         let i = class.id;
-        println!("\nClass {i}");
+        writeln!(w, "\nClass {i}");
         for node in class.nodes.iter() {
             // The display() method implemented by define_language! macro happens to print only the op name
             // TODO is there a cleaner way to obtain the op name?
@@ -20,13 +26,26 @@ pub fn print_eclasses<L: Language + std::fmt::Display, N: Analysis<L>>(eg: &EGra
             }
             let ffn = &eg.ffn_of_enode(node).unwrap();
             if node.children().is_empty() {
-                println!("- [{ffn}] {s}");
+                writeln!(w, "- [{ffn}] {s}");
             } else {
-                println!("- [{ffn}] ({s})");
+                writeln!(w, "- [{ffn}] ({s})");
             }
         }
     }
-    println!("");
+    writeln!(w, "");
+    w.flush().expect("error flushing");
+}
+
+pub fn print_eclasses_to_file<L: Language + std::fmt::Display, N: Analysis<L>>(eg: &EGraph<L, N>, path: &str) -> () {
+    let f = File::create(path).expect("unable to create file");
+    let mut writer = BufWriter::new(f);
+    print_eclasses_to_writer(eg, &mut writer);
+    println!("Wrote egraph to {path}");
+}
+
+
+pub fn print_eclasses<L: Language + std::fmt::Display, N: Analysis<L>>(eg: &EGraph<L, N>) -> () {
+    print_eclasses_to_writer(eg, &mut std::io::stdout());
 }
 
 pub fn why_exists<L: Language + language::FromOp + std::fmt::Display>(runner: &mut Runner<L, ()>, s: &str) -> () {
