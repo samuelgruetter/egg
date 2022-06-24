@@ -26,10 +26,10 @@ fn simplify<'a>(rules: Vec<Rewrite<SimpleLanguage, ()>>, s: &str, extra_s : Vec<
         .with_explanations_enabled()
         //.with_node_limit(50)
         //.with_iter_limit(2)
-        .with_ffn_limit(4)
+        .with_ffn_limit(2)
         .with_expr(&expr)
         .with_exprs(extra_exprs.iter().map(|x| &*x).collect())
-        .with_hook(|r| Ok(print_eclasses(&r.egraph)))
+        //.with_hook(|r| Ok(print_eclasses(&r.egraph)))
         .run(&rules);
     // the Runner knows which e-class the expression given with `with_expr` is in
     let root = runner.roots[0];
@@ -43,7 +43,7 @@ fn simplify<'a>(rules: Vec<Rewrite<SimpleLanguage, ()>>, s: &str, extra_s : Vec<
     let best_str: String = format!("{best}");
     println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best_str.to_string(), best_cost);
     println!("Stop reason: {:?}", runner.stop_reason);
-    why_exists(&mut runner, "(+ x x)");
+    why_exists(&mut runner, "(+ (+ x (+ x y)) (+ (opp x) (opp x)))");
     return (best_str, runner.stop_reason.unwrap());
 }
 

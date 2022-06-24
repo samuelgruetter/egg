@@ -189,7 +189,8 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
     // the given expression and runs the given rules over it
     let mut runner = Runner::default()
         .with_explanations_enabled()
-        .with_node_limit(1000)
+        .with_node_limit(10000)
+        .with_time_limit(instant::Duration::from_secs(10))
         .with_expr(&expr)
         .with_ffn_limit(6)
         .with_exprs(extra_exprs.iter().map(|x| &*x).collect())
@@ -198,6 +199,7 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
     let root = runner.roots[0];
 
     print_eclasses(&runner.egraph);
+    runner.print_report();
     let extractor = Extractor::new(&runner.egraph, MotivateTrue);
     let (best_cost, best) = extractor.find_best(root);
     let mut ctor_equals = None;
