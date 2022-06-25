@@ -1,6 +1,8 @@
 use std::str::FromStr;
 use thiserror::Error;
 use std::borrow::Cow;
+use fmt::Formatter;
+use std::fmt::{self, Display};
 
 use crate::*;
 
@@ -98,6 +100,26 @@ impl<L: Language + FromOp> FromStr for MultiPattern<L> {
             asts.extend(ps.into_iter().map(|p| (v, p)))
         }
         Ok(MultiPattern::new(asts))
+    }
+}
+
+impl<L: Language + Display> Display for MultiPattern<L> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fn fmt_one<L: Language + Display>(f: &mut Formatter<'_>, t: &(Var, PatternAst<L>)) -> fmt::Result {
+            write!(f, "{} = {}", t.0, t.1)
+        }
+
+        if self.asts.is_empty() {
+            write!(f, "<empty MultiPattern>")
+        } else {
+            let mut it = self.asts.iter();
+            fmt_one(f, it.next().unwrap())?;
+            for t in it {
+                write!(f, ", ")?;
+                fmt_one(f, t)?;
+            }
+            Ok(())
+        }
     }
 }
 

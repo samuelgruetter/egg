@@ -3,22 +3,88 @@
 use egg::*;
 use std::io;
 use symbolic_expressions::*;
+use std::convert::TryInto;
+use std::str::FromStr;
+use std::fs::File;
+use std::io::{BufWriter, Write, BufRead};
+
 
 struct Rule {
     rulename: String,
     quantifiers: Vec<String>,
     sideconditions: Vec<Sexp>,
-    conclusion: Sexp,
+    conclusion_lhs: Sexp,
+    conclusion_rhs: Sexp,
     triggers: Vec<Sexp>,
 }
 
+impl Rule {
+    pub fn new() -> Self {
+        Self {
+            rulename: Default::default(),
+            quantifiers: Default::default(),
+            sideconditions: Default::default(),
+            conclusion_lhs: Default::default(),
+            conclusion_rhs: Default::default(),
+            triggers: Default::default(),
+        }
+    }
+
+    pub fn is_eq(&self) -> bool {
+        self.conclusion_lhs != Sexp::String("&True".to_string())
+    }
+
+    pub fn needs_multipattern(&self) -> bool {
+        !self.sideconditions.is_empty() || !self.triggers.is_empty()
+    }
+
+    pub fn to_rewrite(&self) -> Rewrite<SymbolLang, ()> {
+        // if e is (= A B), returns [(name, A); (name, B)]
+        // else returns [(name, e)]
+        fn multipattern_part(name: &str, e: &Sexp) -> Vec<(Var, PatternAst<SymbolLang>)> {
+            let v = Var::from_str(name).unwrap();
+            if e.is_list() && e.list_name().unwrap() == "=" {
+                e.list().unwrap()[1..].iter().map(|p| (v, p.to_string().parse().unwrap())).collect()
+            } else {
+                vec![(v, e.to_string().parse().unwrap())]
+            }
+        }
+
+        let applier: Pattern<SymbolLang> = self.conclusion_rhs.to_string().parse().unwrap();
+        if self.needs_multipattern() {
+            let mut patterns: Vec<(Var, PatternAst<SymbolLang>)> = Vec::new();
+            for (i, p) in self.sideconditions.iter().enumerate() {
+                patterns.extend(multipattern_part(&format!("?$hyp{}", i), p))
+            }
+            for (i, p) in self.triggers.iter().enumerate() {
+                patterns.extend(multipattern_part(&format!("?$pat{}", i), p))
+            }
+            patterns.extend(multipattern_part("?$lhs", &self.conclusion_lhs));
+            let searcher: MultiPattern<SymbolLang> = MultiPattern::new(patterns);
+            println!("{}: {} => {}", self.rulename, searcher, applier);
+            Rewrite::new(self.rulename.clone(), searcher, applier).unwrap()
+        } else {
+            let searcher: Pattern<SymbolLang> = self.conclusion_lhs.to_string().parse::<Pattern<SymbolLang>>().unwrap();
+            println!("{}: {} => {}", self.rulename, searcher, applier);
+            Rewrite::new(self.rulename.clone(), searcher, applier).unwrap()
+        }
+    }
+}
+
 struct Server {
+    rules: Vec<Rule>,
     runner: Runner<SymbolLang, ()>
 }
 
 impl Server {
     pub fn new() -> Self {
-        Self { runner: Default::default() }
+        Self { 
+            rules: Default::default(), 
+            runner: Runner::default()
+                .with_explanations_enabled()
+                .with_node_limit(10000)
+                .with_time_limit(instant::Duration::from_secs(10))
+        }
     }
 
     fn process_line(&mut self, line: Sexp) -> () {
@@ -33,13 +99,14 @@ impl Server {
                             "declare-sort" => {/*ignore*/}
                             "declare-fun" => {/*ignore*/}
                             "assert" => { self.process_assert(l) }
+                            "minimize" => { self.process_minimize(l) }
                             _ => { panic!("unknown command {}", command); }
                         }
                     }
                     _ => panic!("First element of sexpr is not a command")
                 }
             }
-            _ => { panic!("Not an Sexp::List")}
+            _ => { panic!("Expected an Sexp::List, but got {}", line)}
         }
     }
 
@@ -68,17 +135,121 @@ impl Server {
         let expr: RecExpr<SymbolLang> = se.to_string().parse().unwrap();
         // TODO can we avoid inlining Runner.with_expr?
         //self.runner = self.runner.with_expr(&sy);
-        let id = self.runner.egraph.add_expr(&expr);
-        self.runner.roots.push(id);
+        self.runner.add_expr(&expr);
     }
 
-    fn process_rule(&mut self, _r: &Vec<Sexp>) -> Rule {
-        Rule {
-            rulename: Default::default(),
-            quantifiers: Default::default(),
-            sideconditions: Default::default(),
-            conclusion: Default::default(),
-            triggers: Default::default(),
+    // turns sexp ("varname" U) into "varname"
+    fn parse_quantifier(s: &Sexp) -> String {
+        s.list().unwrap()[0].string().unwrap().clone()
+    }
+
+    // r: ["!", formula, ":named", name]
+    fn process_rule(&mut self, r: &Vec<Sexp>) -> () {
+        self.rules.push(Server::parse_rule(r));
+    }
+
+    // r: ["!", formula, ":named", name]
+    fn parse_rule(r: &Vec<Sexp>) -> Rule {
+        let mut result = Rule::new();
+        result.rulename = r[3].string().unwrap().clone();
+
+        // unwrap foralls
+        let mut formula: &Sexp = &r[1];
+        let mut formula_l = formula.list().unwrap();
+        let mut head: &str = &formula_l[0].string().unwrap();
+        if head == "forall" {
+            // formula_l = ["forall", quantifiers, body]
+            result.quantifiers = formula_l[1].list().unwrap().iter().map(Server::parse_quantifier).collect();
+            formula = &formula_l[2];
+            formula_l = formula.list().unwrap();
+            head = &formula_l[0].string().unwrap();
+        }
+
+        // unwrap triggers
+        if head == "!" {
+            // formula_l = ["!", body, ":pattern", patternlist]
+            result.triggers = formula_l[3].list().unwrap().to_vec();
+            formula = &formula_l[1];
+            formula_l = formula.list().unwrap();
+            head = &formula_l[0].string().unwrap();
+        }
+
+        // unwrap implications
+        if head == "=>" {
+            // formula_l = ["=>", side1, ..., sideN, conclusion]
+            result.sideconditions = formula_l[1..formula_l.len()-1].to_vec();
+            formula = formula_l.last().unwrap();
+            formula_l = formula.list().unwrap();
+            head = &formula_l[0].string().unwrap();
+        }
+
+        // unwrap conclusion
+        if head == "=" {
+            // formula_l = ["=", lhs, rhs]
+            result.conclusion_lhs = formula_l[1].clone();
+            result.conclusion_rhs = formula_l[2].clone();
+        } else {
+            panic!("Conclusion is not an equality, but {}", formula)
+        }
+
+        result
+    }
+
+    /// Indicates whether the conclusion of the rule with `name` is an equality
+    fn is_eq(&self, name: &str) -> Option<bool> {
+        let o = self.rules.iter().find(|r| r.rulename == name);
+        match o {
+          Some(r) => { return Some(r.is_eq()); }
+          None => { return None; }
+        }      
+    }
+
+    fn lemma_arity(&self, name: &str) -> usize {
+        let r = self.rules.iter().find(|r| r.rulename == name).unwrap();
+        r.quantifiers.len() + r.sideconditions.len()
+    }
+
+    // l = ["minimize", expr, ffn_limit]
+    fn process_minimize(&mut self, l: Vec<Sexp>) -> () {
+        let expr: RecExpr<SymbolLang> = l[1].to_string().parse().unwrap();
+        self.runner.add_expr(&expr);
+        let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
+        self.runner.ffn_limit = ffn_limit;
+        let rewrites: Vec<Rewrite<SymbolLang, ()>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
+        self.runner.run_nonchained(rewrites.iter());
+        
+        let root = self.runner.roots[0];
+        print_eclasses_to_file(&self.runner.egraph, "./coq_eclasses_log.txt");
+        let extractor = Extractor::new(&self.runner.egraph, AstSize);
+        let (best_cost, best) = extractor.find_best(root);
+        println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
+
+        let explanations = self.runner.explain_equivalence(&expr, &best).get_flat_sexps();
+        println!("Explanation length: {}", explanations.len());
+
+        let path = "./coquetier_proof_output.txt";
+        let f = File::create(path).expect("unable to create file");
+        let mut writer = BufWriter::new(f);
+
+        let mut explanation = explanations.iter();
+        explanation.next();
+
+        writeln!(writer, "(* SIMPLIFICATION *)").expect("failed to write to writer");
+        print_equality_proof_to_writer(
+            explanation, 
+            &mut writer, 
+            &|name| self.is_eq(name), 
+            &|name| self.lemma_arity(name));
+        println!("Wrote proof to {path}");
+    }
+
+    pub fn run_on_reader(&mut self, reader: &mut dyn BufRead) -> () {
+        loop {
+            let mut buffer = String::new();
+            let bytes_read = reader.read_line(&mut buffer).expect("failed to read line from stdin");
+            if bytes_read == 0 { break; }
+            let sexp = symbolic_expressions::parser::parse_str(&buffer).unwrap();
+            self.process_line(sexp);
         }
     }
 }
@@ -86,12 +257,12 @@ impl Server {
 fn main() {
     env_logger::init();
     let mut server = Server::new();
-
-    #[allow(while_true)]
-    while true {
-        let mut buffer = String::new();
-        io::stdin().read_line(&mut buffer).expect("failed to read line from stdin");
-        let sexp = symbolic_expressions::parser::parse_str(&buffer).unwrap();
-        server.process_line(sexp);
+    let use_stdin = false;
+    if use_stdin {
+        server.run_on_reader(&mut io::stdin().lock());
+    } else {
+        let file = File::open("./coquetier_input.smt2").unwrap();
+        let mut reader = io::BufReader::new(file);
+        server.run_on_reader(&mut reader);
     }
 }

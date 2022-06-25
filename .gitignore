@@ -17,3 +17,5 @@ perf.data*
 .vscode/settings.json
 
 coq_eclasses_log.txt
+coquetier_input.smt2
+coquetier_proof_output.txt

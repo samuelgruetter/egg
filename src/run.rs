@@ -155,7 +155,8 @@ pub struct Runner<L: Language, N: Analysis<L>, IterData = ()> {
     iter_limit: usize,
     node_limit: usize,
     time_limit: Duration,
-    ffn_limit: Ffn,
+    /// far-fetched-ness limit
+    pub ffn_limit: Ffn,
 
     start_time: Option<Instant>,
     scheduler: Box<dyn RewriteScheduler<L, N>>,
@@ -398,9 +399,14 @@ where
     /// [`roots`](Runner::roots) field, ordered by
     /// insertion order.
     pub fn with_expr(mut self, expr: &RecExpr<L>) -> Self {
+        self.add_expr(expr);
+        self
+    }
+
+    /// Like with_expr, but does not consume & return self
+    pub fn add_expr(&mut self, expr: &RecExpr<L>) -> () {
         let id = self.egraph.add_expr(expr);
         self.roots.push(id);
-        self
     }
 
     /// Add expressions to the egraph to be run.
@@ -432,6 +438,17 @@ where
         L: 'a,
         N: 'a,
     {
+        self.run_nonchained(rules);
+        self
+    }
+
+    /// Like `run`, but does not consume & return self
+    pub fn run_nonchained<'a, R>(&mut self, rules: R) -> ()
+    where
+        R: IntoIterator<Item = &'a Rewrite<L, N>>,
+        L: 'a,
+        N: 'a,
+    {
         let rules: Vec<&Rewrite<L, N>> = rules.into_iter().collect();
         check_rules(&rules);
         self.egraph.rebuild();
@@ -449,15 +466,19 @@ where
 
         assert!(!self.iterations.is_empty());
         assert!(self.stop_reason.is_some());
-        self
     }
 
     /// Enable explanations for this runner's egraph.
     /// This allows the runner to explain why two expressions are
     /// equivalent with the [`explain_equivalence`](Runner::explain_equivalence) function.
     pub fn with_explanations_enabled(mut self) -> Self {
-        self.egraph = self.egraph.with_explanations_enabled();
+        self.enable_explanations();
         self
+    }
+
+    /// Like with_explanations_enabled, but without consuming & returning self
+    pub fn enable_explanations(&mut self) -> () {
+        self.egraph.enable_explanations();
     }
 
     /// Disable explanations for this runner's egraph.

@@ -219,14 +219,19 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     /// This allows the egraph to explain why two expressions are
     /// equivalent with the [`explain_equivalence`](EGraph::explain_equivalence) function.
     pub fn with_explanations_enabled(mut self) -> Self {
+        self.enable_explanations();
+        self
+    }
+
+    /// Like with_explanations_enabled, but does not consume & return self
+    pub fn enable_explanations(&mut self) -> () {
         if self.explain.is_some() {
-            return self;
+            return;
         }
         if self.total_size() > 0 {
             panic!("Need to set explanations enabled before adding any expressions to the egraph.");
         }
         self.explain = Some(Explain::new());
-        self
     }
 
     /// Disable explanations for this `EGraph`.
