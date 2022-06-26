@@ -217,8 +217,9 @@ impl Server {
         self.runner.ffn_limit = ffn_limit;
         let rewrites: Vec<Rewrite<SymbolLang, ()>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
         self.runner.run_nonchained(rewrites.iter());
+        self.runner.print_report();
         
-        let root = self.runner.roots[0];
+        let root = *self.runner.roots.last().unwrap();
         print_eclasses_to_file(&self.runner.egraph, "./coq_eclasses_log.txt");
         let extractor = Extractor::new(&self.runner.egraph, AstSize);
         let (best_cost, best) = extractor.find_best(root);

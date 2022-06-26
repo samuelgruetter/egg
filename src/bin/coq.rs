@@ -176,6 +176,17 @@ impl CostFunction<CoqSimpleLanguage> for MotivateTrue{
     }
 }
 
+impl CostFunction<SymbolLang> for MotivateTrue {
+    type Cost = f64;
+    fn cost<C>(&mut self, enode: &SymbolLang, mut costs: C) -> Self::Cost
+    where
+        C: FnMut(Id) -> Self::Cost
+    {
+        let op_cost = if *enode == SymbolLang::leaf("&True") { 1.0 } else { 2.0 };
+        enode.fold(op_cost, |sum, id| sum + costs(id))
+    }
+}
+
 /// parse an expression, simplify it using egg, and pretty print it back out
 #[allow(dead_code, unused_must_use)]
 fn simplify(s: &str, extra_s : Vec<&str>, ffn_limit: Ffn) -> () {
@@ -183,8 +194,8 @@ fn simplify(s: &str, extra_s : Vec<&str>, ffn_limit: Ffn) -> () {
     let expr: RecExpr<CoqSimpleLanguage> = s.parse().unwrap();
     // let expr: RecExpr<SymbolLang> = s.parse().unwrap();
 
+    // let extra_exprs : Vec<RecExpr<SymbolLang>> = extra_s.iter().map(|s| { s.parse::<RecExpr<SymbolLang>>().unwrap()}).collect();
     let extra_exprs : Vec<RecExpr<CoqSimpleLanguage>> = extra_s.iter().map(|s| { s.parse::<RecExpr<CoqSimpleLanguage>>().unwrap()}).collect();
-    // let extra_exprs : Vec<&RecExpr<CoqSimpleLanguage>> = extra_exprs1.iter().map(|x| &*x).collect();
     // simplify the expression using a Runner, which creates an e-graph with
     // the given expression and runs the given rules over it
     let mut runner = Runner::default()
@@ -224,6 +235,8 @@ fn simplify(s: &str, extra_s : Vec<&str>, ffn_limit: Ffn) -> () {
             // Figure out exprt1 and exprt2 
             let exprt1 : RecExpr<CoqSimpleLanguage>= t1.parse().unwrap();
             let exprt2 : RecExpr<CoqSimpleLanguage>= t2.parse().unwrap();
+            // let exprt1 : RecExpr<SymbolLang>= t1.parse().unwrap();
+            // let exprt2 : RecExpr<SymbolLang>= t2.parse().unwrap();
             // TODO cleanup to share this piece of code that is currently copy pasted nxt case.
             let explanations = runner.explain_equivalence(&exprt1, &exprt2).get_flat_sexps();
             println!("Explanation length: {}", explanations.len());
@@ -304,6 +317,8 @@ fn prove(s_l: &str, s_r: &str, extra_exprs: Vec<&str>) -> () {
     let expr_r: RecExpr<CoqSimpleLanguage> = s_r.parse().unwrap();
     // let expr_r: RecExpr<SymbolLang> = s_r.parse().unwrap();
 
+    // let extra_exprs_parsed : Vec<RecExpr<SymbolLang>> = extra_exprs.iter().map(|s| s.parse::<RecExpr<SymbolLang>>().unwrap()).collect();
+    // let mut extra_exprs_parsed2 : Vec<&RecExpr<SymbolLang>> = vec![];
     let extra_exprs_parsed : Vec<RecExpr<CoqSimpleLanguage>> = extra_exprs.iter().map(|s| s.parse::<RecExpr<CoqSimpleLanguage>>().unwrap()).collect();
     let mut extra_exprs_parsed2 : Vec<&RecExpr<CoqSimpleLanguage>> = vec![];
     for i in 0..extra_exprs_parsed.len() {

@@ -1,9 +1,11 @@
 
 #![allow(missing_docs,non_camel_case_types)]
 use crate ::*;
+
 pub fn get_proof_file_path() -> &'static str {
   "/tmp/egg_proof.txt"
 }
+
 define_language! {
   pub enum CoqSimpleLanguage {
     "&Z.min" = IDZDOTmin([Id; 2]),
@@ -398,7 +400,7 @@ pub fn is_eq(name: &str) -> Option<bool> {
 }
 
 #[allow(unused_variables)]
-pub fn run_simplifier(f_simplify : fn(&str, Vec<&str>) -> (), f_prove : fn(&str, &str, Vec<&str>) -> ()) {
+pub fn run_simplifier(f_simplify : fn(&str, Vec<&str>, Ffn) -> (), f_prove : fn(&str, &str, Vec<&str>) -> ()) {
   let es = vec![
     "(&Z.lt(&Z.pow &2 &3)(&Z.pow &2 &4))",
     "(&Z.lt &0(&Z.pow &2 &64))",
@@ -428,6 +430,6 @@ pub fn run_simplifier(f_simplify : fn(&str, Vec<&str>) -> (), f_prove : fn(&str,
     "(&not(&@eq &Z(&@word.unsigned &64 &word(&@word.sub &64 &word &x2 &x1))&0))",
     "(&Z.pow &2 &3)",
   ];
-  let st : &str = "(&@eq &Z(&Z.sub(&Z.of_nat &v)(&Z.add &1 &halflen))(&Z.sub(&Z.of_nat &v)(&Z.add &halflen &1)))";
-  f_simplify(st, es);
+  let st : &str = "(&@eq &Z(&@word.unsigned &64 &word(&@word.sub &64 &word &x2(&@word.add &64 &word(&@word.add &64 &word &x1(&@word.slu &64 &word(&@word.sru &64 &word(&@word.sub &64 &word &x2 &x1)(&@word.of_Z &64 &word &4))(&@word.of_Z &64 &word &3)))(&@word.of_Z &64 &word &8))))(&Z.mul &8(&Z.of_nat(&@Datatypes.length(&@word.rep &64 &word)(&@List.skipn(&@word.rep &64 &word)(&S(&Z.to_nat(&Z.div(&@word.unsigned &64 &word(&@word.sub &64 &word(&@word.add &64 &word &x1(&@word.slu &64 &word(&@word.sru &64 &word(&@word.sub &64 &word &x2 &x1)(&@word.of_Z &64 &word &4))(&@word.of_Z &64 &word &3)))&x1))(&@word.unsigned &64 &word(&@word.of_Z &64 &word &8)))))&x)))))";
+  f_simplify(st, es, 6);
 }
