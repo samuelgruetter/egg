@@ -855,6 +855,12 @@ impl<L: Language> Explain<L> {
         }
     }
 
+    // BUG?: both call sites call it with surviving node being node1, but this one links node1 to point to node2
+    // before bugfix, callers of Explain::union would expect node1 to become the new canonical id,
+    // but the implementation of union was making explanations of node1 point to node2, so node2 would
+    // become non-canonical, but have an explanation (.next) pointing to itself, so later, when
+    // generating an explanation for equivalence between node1 and node2, the common ancestor search
+    // would encounter a self-loop on node2, but why on node1??
     pub(crate) fn union(
         &mut self,
         node1: Id,
@@ -871,10 +877,11 @@ impl<L: Language> Explain<L> {
             self.set_existance_reason(node2, node1)
         }
 
-        self.make_leader(node1);
-        self.explainfind[usize::from(node1)].next = node2;
-        self.explainfind[usize::from(node1)].justification = justification;
-        self.explainfind[usize::from(node1)].is_rewrite_forward = true;
+        // node2 only becomes a pre-leader pointing to node1, and node1 will be the real leader
+        self.make_leader(node2); 
+        self.explainfind[usize::from(node2)].next = node1;
+        self.explainfind[usize::from(node2)].justification = justification;
+        self.explainfind[usize::from(node2)].is_rewrite_forward = false;
     }
 
     pub(crate) fn explain_equivalence(&mut self, left: Id, right: Id) -> Explanation<L> {
@@ -897,6 +904,7 @@ impl<L: Language> Explain<L> {
     fn common_ancestor(&self, mut left: Id, mut right: Id) -> Id {
         let mut seen_left: HashSet<Id> = Default::default();
         let mut seen_right: HashSet<Id> = Default::default();
+        println!("common_ancestor({left}, {right})");
         loop {
             seen_left.insert(left);
             if seen_right.contains(&left) {
@@ -910,6 +918,7 @@ impl<L: Language> Explain<L> {
 
             let next_left = self.explainfind[usize::from(left)].next;
             let next_right = self.explainfind[usize::from(right)].next;
+            println!("next_left={next_left}, left={left}, next_right={next_right}, right={right}");
             assert!(next_left != left || next_right != right);
             left = next_left;
             right = next_right;
