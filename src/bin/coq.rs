@@ -158,8 +158,8 @@ fn find_distinct_ctor_equals<L: Language + std::fmt::Display, N: Analysis<L>>(eg
         }
     }
     return None;
-
 }
+
 struct MotivateTrue;
 impl CostFunction<CoqSimpleLanguage> for MotivateTrue{
     type Cost = f64;

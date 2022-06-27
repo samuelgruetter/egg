@@ -228,29 +228,66 @@ impl Server {
         print_eclasses_to_file(&self.runner.egraph, "./coq_eclasses_log.txt");
         let dump_time = t.elapsed().as_secs_f64();
         println!("Dumping the egraph took {dump_time:.3}s");
-        let extractor = Extractor::new(&self.runner.egraph, AstSize);
+       
+
+        let extractor = Extractor::new(&self.runner.egraph, MotivateTrue);
         let (best_cost, best) = extractor.find_best(root);
         println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
+        let mut ctor_equals = None;
 
-        let t = Instant::now();
-        let explanations = self.runner.explain_equivalence(&expr, &best).get_flat_sexps();
-        let expl_time = t.elapsed().as_secs_f64();
-        println!("Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
+        if best_cost != 1.0 {
+            // Only if we failed to simplify to True (only expression of cost equal to one)
+            // then check try to find an inconsistency. This allow us to use
+            // Coquetier to generate the proof of equality between the two distinct
+            // constructor int the environment that is inconsistent
+            ctor_equals = find_distinct_ctor_equals(&self.runner.egraph);
+        }
+        match &ctor_equals {
+            Some((t1,t2)) => { 
+                let t = Instant::now();
+                let exprt1 : RecExpr<SymbolLang>= t1.parse().unwrap();
+                let exprt2 : RecExpr<SymbolLang>= t2.parse().unwrap();
+                let explanations = self.runner.explain_equivalence(&exprt1, &exprt2).get_flat_sexps();
+                let expl_time = t.elapsed().as_secs_f64();
+                println!("Absurd found Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
 
-        let path = "./coquetier_proof_output.txt";
-        let f = File::create(path).expect("unable to create file");
-        let mut writer = BufWriter::new(f);
+                let path = "./coquetier_proof_output.txt";
+                let f = File::create(path).expect("unable to create file");
+                let mut writer = BufWriter::new(f);
 
-        let mut explanation = explanations.iter();
-        explanation.next();
+                let mut explanation = explanations.iter();
+                explanation.next();
+                writeln!(writer, "(* CONTRADICTION *)").expect("failed to write to writer");
+                writeln!(writer, "assert ({} = {}) as ABSURDCASE.", t1, t2).expect("failed to write to writer");
+                print_equality_proof_to_writer(
+                    true,
+                    explanation, 
+                    &mut writer, 
+                    &|name| self.is_eq(name), 
+                    &|name| self.lemma_arity(name));
+                println!("Wrote proof to {path}"); }
+            None => {
+                let t = Instant::now();
+                let explanations = self.runner.explain_equivalence(&expr, &best).get_flat_sexps();
+                let expl_time = t.elapsed().as_secs_f64();
+                println!("Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
 
-        writeln!(writer, "(* SIMPLIFICATION *)").expect("failed to write to writer");
-        print_equality_proof_to_writer(
-            explanation, 
-            &mut writer, 
-            &|name| self.is_eq(name), 
-            &|name| self.lemma_arity(name));
-        println!("Wrote proof to {path}");
+                let path = "./coquetier_proof_output.txt";
+                let f = File::create(path).expect("unable to create file");
+                let mut writer = BufWriter::new(f);
+
+                let mut explanation = explanations.iter();
+                explanation.next();
+
+                writeln!(writer, "(* SIMPLIFICATION *)").expect("failed to write to writer");
+                print_equality_proof_to_writer(
+                    false,
+                    explanation, 
+                    &mut writer, 
+                    &|name| self.is_eq(name), 
+                    &|name| self.lemma_arity(name));
+                println!("Wrote proof to {path}"); }
+        }
     }
 
     pub fn run_on_reader(&mut self, reader: &mut dyn BufRead) -> () {
