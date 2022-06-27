@@ -2,6 +2,7 @@
 
 use egg::*;
 use std::io;
+use std::time::Instant;
 use symbolic_expressions::*;
 use std::convert::TryInto;
 use std::str::FromStr;
@@ -216,17 +217,25 @@ impl Server {
         let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
         self.runner.ffn_limit = ffn_limit;
         let rewrites: Vec<Rewrite<SymbolLang, ()>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
+        let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
+        let saturation_time = t.elapsed().as_secs_f64();
+        println!("Saturation took {saturation_time:.3}s");
         self.runner.print_report();
         
         let root = *self.runner.roots.last().unwrap();
+        let t = Instant::now();
         print_eclasses_to_file(&self.runner.egraph, "./coq_eclasses_log.txt");
+        let dump_time = t.elapsed().as_secs_f64();
+        println!("Dumping the egraph took {dump_time:.3}s");
         let extractor = Extractor::new(&self.runner.egraph, AstSize);
         let (best_cost, best) = extractor.find_best(root);
         println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
 
+        let t = Instant::now();
         let explanations = self.runner.explain_equivalence(&expr, &best).get_flat_sexps();
-        println!("Explanation length: {}", explanations.len());
+        let expl_time = t.elapsed().as_secs_f64();
+        println!("Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
 
         let path = "./coquetier_proof_output.txt";
         let f = File::create(path).expect("unable to create file");
@@ -256,6 +265,7 @@ impl Server {
 }
 
 fn main() {
+    let t = Instant::now();
     env_logger::init();
     let mut server = Server::new();
     let use_stdin = false;
@@ -266,4 +276,6 @@ fn main() {
         let mut reader = io::BufReader::new(file);
         server.run_on_reader(&mut reader);
     }
+    let main_time = t.elapsed().as_secs_f64();
+    println!("coquetier's main() function took {main_time}s");
 }
