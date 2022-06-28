@@ -13,7 +13,7 @@ pub fn print_eclasses_to_writer<W: Write, L: Language + std::fmt::Display, N: An
     classes.sort_by(|a, b| a.id.cmp(&b.id));
     for class in classes {
         let i = class.id;
-        writeln!(w, "\nClass {i}");
+        let mut reps: Vec<String> = vec![];
         for node in class.nodes.iter() {
             // The display() method implemented by define_language! macro happens to print only the op name
             // TODO is there a cleaner way to obtain the op name?
@@ -26,10 +26,15 @@ pub fn print_eclasses_to_writer<W: Write, L: Language + std::fmt::Display, N: An
             }
             let ffn = &eg.ffn_of_enode(node).unwrap();
             if node.children().is_empty() {
-                writeln!(w, "- [{ffn}] {s}");
+                reps.push(format!("- [{ffn}] {s}"));
             } else {
-                writeln!(w, "- [{ffn}] ({s})");
+                reps.push(format!("- [{ffn}] ({s})"));
             }
+        }
+        writeln!(w, "\nClass {i}");
+        reps.sort();
+        for s in reps {
+            writeln!(w, "{s}");
         }
     }
     writeln!(w, "");
