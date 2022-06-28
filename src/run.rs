@@ -537,6 +537,14 @@ where
         }
     }
 
+    fn canonical_roots(&self) -> HashSet<Id> {
+        let mut res = HashSet::default();
+        for e in self.roots.iter() {
+            res.insert(self.egraph.find(*e));
+        }
+        res
+    }
+
     fn run_one(&mut self, rules: &[&Rewrite<L, N>]) -> Iteration<IterData> {
         assert!(self.stop_reason.is_none());
 
@@ -566,15 +574,24 @@ where
 
         let start_time = Instant::now();
 
+        let initial_terms = self.canonical_roots();
         let mut matches = Vec::new();
         result = result.and_then(|_| {
             rules.iter().try_for_each(|rule| {
-                //println!("Rule {}:", rule.name);
+                //println!("\nRule {}:", rule.name);
                 let mut ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
+                let left_pat = rule.searcher.get_pattern_ast().unwrap();
+                let right_pat = rule.applier.get_pattern_ast().unwrap();
                 for search_matches in ms.iter_mut() {
-                    //print!("Length before: {}, ", search_matches.substs.len());
+                    //let len_before = search_matches.substs.len();
                     search_matches.compute_and_filter_ffns(&self.egraph, &rule.searcher, self.ffn_limit);
-                    //println!("length after shrinking: {}", search_matches.substs.len());
+                    search_matches.substs.retain(|s| !self.egraph.is_new_and_loopy(left_pat, right_pat, s, &initial_terms));
+                    //let len_after = search_matches.substs.len();
+                    //if len_before == len_after {
+                    //    println!("Length of matches remained {len_before}");
+                    //} else {
+                    //    println!("Length of matches shrank from {len_before} to {len_after}");
+                    //}
                 }
                 matches.push(ms);
                 self.check_limits()

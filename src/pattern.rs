@@ -277,6 +277,8 @@ impl<'a, L: Language> SearchMatches<'a, L> {
             if ffn <= max_ffn {
                 self.substs.push(subst);
                 self.ffns.push(ffn);
+            } else {
+                //println!("Dropping match because ffn limit was hit");
             }
         }
     }

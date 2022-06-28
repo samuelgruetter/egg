@@ -1,4 +1,5 @@
 use crate::*;
+use queues::*;
 use std::{
     borrow::BorrowMut,
     fmt::{self, Debug, Display},
@@ -805,6 +806,133 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     /// [`Debug`]: std::fmt::Debug
     pub fn dump(&self) -> impl Debug + '_ {
         EGraphDump(self)
+    }
+
+    pub fn contains_instantiation(&self, pat: &PatternAst<L>, subst: &Subst) -> bool {
+        let nodes = pat.as_ref();
+        let mut instantiated_ids = Vec::with_capacity(nodes.len());
+        for node in nodes {
+            match node {
+                ENodeOrVar::Var(var) => {
+                    let id = subst[*var];
+                    instantiated_ids.push(id);
+                }
+                ENodeOrVar::ENode(node) => {
+                    let instantiated_node = node.clone().map_children(|i| instantiated_ids[usize::from(i)]);
+                    if let Some(id_noncanonical) = self.lookup_internal(instantiated_node) {
+                        instantiated_ids.push(self.find(id_noncanonical));
+                    } else {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    /// returns true iff at least one of the `targets` can be reached from `start`
+    /// by following parent pointers, while avoiding all eclasses in `avoid`
+    pub fn bfs_parents(&self, start: Id, mut avoid: HashSet<Id>, targets: &HashSet<Id>) -> bool {
+        if targets.contains(&start) { return true; }
+        let mut q: Queue<Id> = queue![];
+        q.add(start).unwrap();
+        avoid.insert(start);
+        while q.size() > 0 {
+            let n = q.remove().unwrap();
+            let c = self.classes.get(&n).unwrap();
+            for (_parent_enode, parent_id) in c.parents.iter() {
+                let p = self.find(*parent_id);
+                if !avoid.contains(&p) {
+                    if targets.contains(&p) { return true; }
+                    q.add(p).unwrap();
+                    avoid.insert(p);
+                }
+            }
+        }
+        false
+    }
+
+    /// Checks that the expression obtained by instantiating `pat` with `subst` does 
+    /// not contain any subterm that is in the same eclass as one of its ancestors.
+    /// Returns `(Some (eclass id of pat after applying substitution, set of used eclass ids))`,
+    /// if the test passes, None otherwise.
+    /// The HashSets are mutable, but each function only mutates the one set that it
+    /// creates and returns.
+    fn eclasses_used_by_instantiation(
+        &self,
+        pat: &[ENodeOrVar<L>], 
+        subst: &Subst, 
+    ) -> Option<(Id, HashSet<Id>)> {
+        // both mutable in the sense that we modify its contents
+        // and that we reassign the variable to an entirely new set
+        let mut used: HashSet<Id> = HashSet::default();
+        match pat.last().unwrap() {
+            ENodeOrVar::ENode(pattern_node) => {
+                let mut loopy = false;
+                let mut instantiated_node = pattern_node.clone();
+                instantiated_node.for_each_mut(|child_ptr| {
+                    // at the beginning of the lambda, child_ptr points to an Id that indexes
+                    // into the pat slice, and at the end of the lambda, child_ptr points to
+                    // an Id that refers to an eclass id, and instantiated_node is not a pattern
+                    // any more, but an enode
+                    let i = usize::from(*child_ptr) + 1;
+                    let child: &[ENodeOrVar<L>] = &pat[..i];
+                    match self.eclasses_used_by_instantiation(child, subst) {
+                        Some((eid_child, u_child)) => {
+                            // TODO calling collect each time causes runtime to be quadratic 
+                            used = used.union(&u_child).map(|id| *id).collect();
+                            *child_ptr = eid_child;
+                        }
+                        None => {
+                            loopy = true;
+                        }
+                    }
+                });
+                if loopy { 
+                    None
+                } else {
+                    let eid: Id = self.lookup(instantiated_node).unwrap();
+                    if used.contains(&eid) {
+                        None // loop detected
+                    } else {
+                        used.insert(eid);
+                        Some((eid, used))
+                    }
+                }
+            }
+            ENodeOrVar::Var(x) => { 
+                let eid = *subst.get(*x).unwrap();
+                used.insert(eid);
+                Some((eid, used))
+            }
+        }
+    }
+
+    // TODO: check not only left_pat (aka lhs of rewrite), but also the triggers 
+    // (but not the sideconditions, because these could be ands that are very likely to be loopy)
+    pub fn is_new_and_loopy(
+        &self, 
+        left_pat: &PatternAst<L>, 
+        right_pat: &PatternAst<L>,
+        subst: &Subst,
+        initial_terms: &HashSet<Id>,
+    ) -> bool {
+        if self.contains_instantiation(right_pat, subst) {
+            //println!("Keeping match because not new"); 
+            return false; /* not new */ 
+        }
+        if let Some((left_pat_root, used)) = self.eclasses_used_by_instantiation(left_pat.as_ref(), subst) {
+            let found_valid_path = self.bfs_parents(left_pat_root, used, initial_terms);
+            //if found_valid_path {
+            //    println!("Keeping match because valid path found");
+            //} else {
+            //    println!("Dropping match because loopy (no valid path found)");
+            //}
+            !found_valid_path
+        } else {
+            //println!("Dropping match because loopy within the pattern");
+            true // eclasses_used_by_instantiation returning None means loopy
+        }
     }
 
     /// For each eclass, returns the set of all eids that can appear as subterms

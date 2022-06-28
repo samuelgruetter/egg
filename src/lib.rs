@@ -1,5 +1,5 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![warn(missing_docs)]
+//#![warn(missing_docs)]
 /*!
 
 `egg` (**e**-**g**raphs **g**ood) is a e-graph library optimized for equality saturation.
