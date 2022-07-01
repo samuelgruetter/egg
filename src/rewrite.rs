@@ -121,7 +121,7 @@ impl<L: Language + Display /* for better debugging */, N: Analysis<L>> Rewrite<L
     }
 }
 
-impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
+impl<L: Language + Display, N: Analysis<L>> Rewrite<L, N> {
     /// This `run` is for testing use only. You should use things
     /// from the `egg::run` module
     #[cfg(test)]
@@ -330,6 +330,7 @@ where
             } else {
                 None
             };
+            assert!(mat.substs.len() == mat.ffns.len());
             for (subst, ffn) in mat.substs.iter().zip(mat.ffns.iter()) {
                 let ids = self.apply_one(egraph, mat.eclass, subst, ast, rule_name, *ffn);
                 added.extend(ids)

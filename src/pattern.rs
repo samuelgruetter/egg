@@ -275,6 +275,7 @@ impl<'a, L: Language + std::fmt::Display /*for better debugging*/> SearchMatches
         //self.ffns.resize(self.substs.len(), 0); // <-- to disable ffn restrictions
         let all_substs = self.substs.clone();
         self.substs.clear();
+        assert!(self.ffns.len() == 0);
         for subst in all_substs {
             if egraph.contains_instantiation(right_pat, &subst) {
                 self.substs.push(subst);
@@ -291,6 +292,27 @@ impl<'a, L: Language + std::fmt::Display /*for better debugging*/> SearchMatches
                 }
             }
         }
+        println!("substs/ffn lengths in compute_and_filter: {}, {}", self.substs.len(), self.ffns.len());
+        assert!(self.substs.len() == self.ffns.len());
+    }
+
+    pub fn remove_loopy<N: Analysis<L>>(
+        &mut self,
+        egraph: &EGraph<L, N>, 
+        rule: &Rewrite<L, N>,
+        initial_terms: &HashSet<Id>,
+    ) -> () {
+        assert!(self.substs.len() == self.ffns.len());
+        let mut new_substs: Vec<Subst> = vec![];
+        let mut new_ffns: Vec<Option<Ffn>> = vec![];
+        for (subst, ffn) in self.substs.iter().zip(self.ffns.iter()) {
+            if !rule.is_new_and_loopy(subst, egraph, initial_terms) {
+                new_substs.push(subst.clone());
+                new_ffns.push(*ffn);
+            }
+        }
+        self.substs = new_substs;
+        self.ffns = new_ffns;
     }
 }
 
@@ -350,7 +372,7 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
 
 impl<L, A> Applier<L, A> for Pattern<L>
 where
-    L: Language,
+    L: Language + Display,
     A: Analysis<L>,
 {
     fn get_pattern_ast(&self) -> Option<&PatternAst<L>> {
@@ -368,6 +390,8 @@ where
         let mut id_buf = vec![0.into(); ast.len()];
         for mat in matches {
             let sast = mat.ast.as_ref().map(|cow| cow.as_ref());
+            println!("lens:: {}, {}", mat.substs.len(), mat.ffns.len());
+            assert!(mat.substs.len() == mat.ffns.len());
             for (subst, ffn) in mat.substs.iter().zip(mat.ffns.iter()) {
                 let did_something;
                 let id;
@@ -422,7 +446,7 @@ where
     }
 }
 
-pub(crate) fn apply_pat<L: Language, A: Analysis<L>>(
+pub(crate) fn apply_pat<L: Language + Display, A: Analysis<L>>(
     ids: &mut [Id],
     pat: &[ENodeOrVar<L>],
     egraph: &mut EGraph<L, A>,

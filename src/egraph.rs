@@ -246,6 +246,9 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     pub fn are_explanations_enabled(&self) -> bool {
         self.explain.is_some()
     }
+}
+
+impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
 
     /// When explanations are enabled, this function
     /// produces an [`Explanation`] describing why two expressions are equivalent.
@@ -311,6 +314,9 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
             panic!("Use runner.with_explanations_enabled() or egraph.with_explanations_enabled() before running to get explanations.");
         }
     }
+}
+
+impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// Canonicalizes an eclass id.
     ///
@@ -372,7 +378,7 @@ impl<L: Language, N: Analysis<L>> std::ops::IndexMut<Id> for EGraph<L, N> {
     }
 }
 
-impl<L: Language, N: Analysis<L>> EGraph<L, N> {
+impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
     /// Adds a [`RecExpr`] to the [`EGraph`], returning the id of the RecExpr's eclass.
     ///
     /// # Example
@@ -427,6 +433,8 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     }
 
     fn add_instantiation_internal(&mut self, pat: &PatternAst<L>, subst: &Subst, ffn: Option<Ffn>) -> Id {
+        println!("add_instantiation_internal({}, {}, {:?})", pat, fmt_subst_to_str(self, &subst), ffn);
+
         let nodes = pat.as_ref();
         let mut new_ids = Vec::with_capacity(nodes.len());
         let mut new_node_q = Vec::with_capacity(nodes.len());
@@ -460,6 +468,9 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         }
         *new_ids.last().unwrap()
     }
+}
+
+impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// Lookup the eclass of the given enode.
     ///
@@ -525,6 +536,9 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         }
         Some(new_ids)
     }
+}
+
+impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
 
     /// Adds an enode to the [`EGraph`].
     ///
@@ -573,7 +587,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     }
 
     /// Adds an enode to the egraph and also returns the the enode's id (uncanonicalized).
-    fn add_internal_without_ffn(&mut self, mut enode: L, expect_to_be_already_present: bool) -> Id {
+    fn add_internal_without_ffn(&mut self, mut enode: L, _expect_to_be_already_present: bool) -> Id {
         let original = enode.clone();
         if let Some(existing_id) = self.lookup_internal(&mut enode) {
             let id = self.find(existing_id);
@@ -593,7 +607,12 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
                 existing_id
             }
         } else {
-            assert!(!expect_to_be_already_present);
+            // assert!(!expect_to_be_already_present);
+            // can fail because the notion of "canonical enode" changes during the apply phase, as
+            // new unions are registered and immediately become visible to self.find,
+            // so self.lookup_internal (which first canonicalizes the enode) will look up an
+            // even-more-canonical enode than the one it is expected to find
+
             let id = self.make_new_eclass(enode);
             if let Some(explain) = self.explain.as_mut() {
                 explain.add(original, id, id);
@@ -605,6 +624,9 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
             id
         }
     }
+}
+
+impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// This function makes a new eclass in the egraph (but doesn't touch explanations)
     fn make_new_eclass(&mut self, enode: L) -> Id {
@@ -706,6 +728,9 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         }
         current_max
     }
+}
+
+impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
 
     /// Given two patterns and a substitution, add the patterns
     /// and union them.
@@ -723,7 +748,8 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         rule_name: impl Into<Symbol>,
         ffn: Option<Ffn>
     ) -> (Id, bool) {
-        let id1 = self.add_instantiation_internal(from_pat, subst, ffn); // TODO why is this not just a lookup?
+        // We pass None because we expect the lhs to be already present and don't want to change its ffn
+        let id1 = self.add_instantiation_internal(from_pat, subst, None); // TODO why is this not just a lookup? For explanations?
         let size_before = self.unionfind.size();
         let id2 = self.add_instantiation_internal(to_pat, subst, ffn);
         let rhs_new = self.unionfind.size() > size_before;
@@ -735,6 +761,9 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         );
         (self.find(id1), did_union)
     }
+}
+
+impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// Unions two eclasses given their ids.
     ///
@@ -821,6 +850,8 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
 
     pub fn contains_instantiation(&self, pat: &PatternAst<L>, subst: &Subst) -> bool {
+        self.check_ffn_domain();
+
         let nodes = pat.as_ref();
         let mut instantiated_ids = Vec::with_capacity(nodes.len());
         for node in nodes {
@@ -831,8 +862,15 @@ impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
                 }
                 ENodeOrVar::ENode(node) => {
                     let instantiated_node = node.clone().map_children(|i| instantiated_ids[usize::from(i)]);
+                    
+                    //let mut canon_node = instantiated_node.clone();
+                    //canon_node.update_children(|id| self.find(id));
+
                     if let Some(id_noncanonical) = self.lookup_internal(instantiated_node) {
                         instantiated_ids.push(self.find(id_noncanonical));
+
+                        //self.farfetchedness.get(&canon_node).expect("ffn must be present if lookup_internal succeeds");
+
                     } else {
                         return false;
                     }
@@ -845,7 +883,7 @@ impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
     }
 }
 
-impl<L: Language, N: Analysis<L>> EGraph<L, N> {
+impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
 
     /// returns true iff at least one of the `targets` can be reached from `start`
     /// by following parent pointers, while avoiding all eclasses in `avoid`
@@ -868,6 +906,9 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         }
         false
     }
+}
+
+impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// Checks that the expression obtained by instantiating `pat` with `subst` does 
     /// not contain any subterm that is in the same eclass as one of its ancestors.
@@ -991,7 +1032,7 @@ impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
 }
 
 // All the rebuilding stuff
-impl<L: Language, N: Analysis<L>> EGraph<L, N> {
+impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
     #[inline(never)]
     fn rebuild_classes(&mut self) -> usize {
         let mut classes_by_op = std::mem::take(&mut self.classes_by_op);
@@ -1117,6 +1158,10 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         assert!(self.pending.is_empty());
         assert!(self.analysis_pending.is_empty());
 
+        n_unions
+    }
+
+    pub fn recompute_ffns(&mut self) -> () {
         let mut new_ffns: HashMap<L, Ffn> = HashMap::default();
         for (oldnode, ffn) in self.farfetchedness.iter() {
             let mut node = oldnode.clone();
@@ -1129,17 +1174,19 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
             new_ffns.insert(node, new_ffn);
         }
         self.farfetchedness = new_ffns;
+    }
 
+    /// checks that the domain of the far-fetched-ness map contains all enodes that can be obtained
+    /// by canonicalizing one in the memo
+    pub fn check_ffn_domain(&self) -> () {
         for (oldnode, _id) in self.memo.iter() {
             let mut node = oldnode.clone();
             node.update_children(|id| self.find(id));
-            let offn = self.farfetchedness.get(&node);
-            println!("offn: {offn:?}");
-            assert!(offn.is_some());
-            assert!(*offn.unwrap() != 255);
+            let o_ffn = self.farfetchedness.get(&node);
+            //println!("offn: {offn:?}");
+            assert!(o_ffn.is_some());
+            assert!(*o_ffn.unwrap() < 100); // bigger than 100 means infinity or error marker
         }
-
-        n_unions
     }
 
     /// Restores the egraph invariants of congruence and enode uniqueness.
@@ -1211,6 +1258,9 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
         //println!("Memo: {:#?}", self.memo);
         //println!("Ffn: {:#?}", self.farfetchedness);
+
+        self.recompute_ffns();
+        self.check_ffn_domain();
 
         n_unions
     }

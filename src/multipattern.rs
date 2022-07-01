@@ -180,7 +180,7 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for MultiPattern<L> {
     }
 }
 
-impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
+impl<L: Language + Display, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
     fn apply_one(
         &self,
         _egraph: &mut EGraph<L, A>,
@@ -203,6 +203,7 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
         // the ids returned are kinda garbage
         let mut added = vec![];
         for mat in matches {
+            assert!(mat.substs.len() == mat.ffns.len());
             for (subst, ffn) in mat.substs.iter().zip(mat.ffns.iter()) {
                 let mut subst = subst.clone();
                 let mut id_buf = vec![];
@@ -211,6 +212,7 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
                     let id1 = crate::pattern::apply_pat(&mut id_buf, p.as_ref(), egraph, &subst, *ffn);
                     if let Some(id2) = subst.insert(*v, id1) {
                         egraph.union(id1, id2);
+                        //egraph.union_instantiations(p, &ENodeOrVar::Var(v), &subst, rule_name, Some(214/*marker ffn for debugging*/));
                     }
                     if i == 0 {
                         added.push(id1)

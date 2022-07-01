@@ -164,7 +164,7 @@ pub struct Runner<L: Language, N: Analysis<L>, IterData = ()> {
 
 impl<L, N> Default for Runner<L, N, ()>
 where
-    L: Language,
+    L: Language + std::fmt::Display,
     N: Analysis<L> + Default,
 {
     fn default() -> Self {
@@ -311,7 +311,7 @@ type RunnerResult<T> = std::result::Result<T, StopReason>;
 
 impl<L, N, IterData> Runner<L, N, IterData>
 where
-    L: Language,
+    L: Language + std::fmt::Display,
     N: Analysis<L>,
     IterData: IterationData<L, N>,
 {
@@ -594,8 +594,7 @@ where
                     //let len_before = search_matches.substs.len();
                     search_matches.compute_and_filter_ffns(&self.egraph, 
                         &rule.searcher, rule.applier.get_pattern_ast().unwrap(), self.ffn_limit);
-                    search_matches.substs.retain
-                        (|s| !rule.is_new_and_loopy(s, &self.egraph, &initial_terms));
+                    search_matches.remove_loopy(&self.egraph, rule, &initial_terms);
                     //let len_after = search_matches.substs.len();
                     //if len_before == len_after {
                     //    println!("Length of matches remained {len_before}");
