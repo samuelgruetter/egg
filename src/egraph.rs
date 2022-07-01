@@ -30,6 +30,7 @@ pub fn ffn_zero() -> Ffn {
 
 #[allow(missing_docs)]
 pub fn ffn_increase(a: Ffn) -> Ffn {
+    if a == 255 { panic!("Cannot increase ffn_infinity"); }
     a + 1
 }
 
@@ -552,7 +553,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
             Some(existing) => ffn_min(*existing, new_ffn),
             None => new_ffn
         };
-        self.farfetchedness.insert(enode.clone(), lowest_ffn);
+        self.farfetchedness.insert(enode, lowest_ffn);
     }
 
     /// Adds an enode to the egraph and also returns the the enode's id (uncanonicalized).
@@ -567,11 +568,12 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
             Some(new) => { self.record_ffn(enode.clone(), new); } 
             None => {}
         }
-        self.add_internal_without_ffn(enode)
+        let expect_to_be_already_present = new_ffn == None || new_ffn.unwrap() == 255;
+        self.add_internal_without_ffn(enode, expect_to_be_already_present)
     }
 
     /// Adds an enode to the egraph and also returns the the enode's id (uncanonicalized).
-    fn add_internal_without_ffn(&mut self, mut enode: L) -> Id {
+    fn add_internal_without_ffn(&mut self, mut enode: L, expect_to_be_already_present: bool) -> Id {
         let original = enode.clone();
         if let Some(existing_id) = self.lookup_internal(&mut enode) {
             let id = self.find(existing_id);
@@ -580,6 +582,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
                 if let Some(existing_explain) = explain.uncanon_memo.get(&original) {
                     *existing_explain
                 } else {
+                    // Note: new_id will never appear in the memo
                     let new_id = self.unionfind.make_set();
                     explain.add(original, new_id, new_id);
                     self.unionfind.union(id, new_id);
@@ -590,6 +593,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
                 existing_id
             }
         } else {
+            assert!(!expect_to_be_already_present);
             let id = self.make_new_eclass(enode);
             if let Some(explain) = self.explain.as_mut() {
                 explain.add(original, id, id);
@@ -664,6 +668,8 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         let mut current_min = ffn_infinity();
         if let Some(eclass) = self.classes.get(&eclass_id) {
             for enode in eclass.nodes.iter() {
+                //let is_canon = enode.all(|c| self.find(c) == c);
+                //assert!(is_canon); //seems to hold
                 current_min = ffn_min(current_min, *self.farfetchedness.get(enode).unwrap());
             }
         } else {
@@ -810,6 +816,9 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     pub fn dump(&self) -> impl Debug + '_ {
         EGraphDump(self)
     }
+}
+
+impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
 
     pub fn contains_instantiation(&self, pat: &PatternAst<L>, subst: &Subst) -> bool {
         let nodes = pat.as_ref();
@@ -830,8 +839,13 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
                 }
             }
         }
+        let top = *instantiated_ids.last().unwrap();
+        println!("contains_instantiation({}, {}) true for {}", pat, fmt_subst_to_str(self, &subst), top);
         true
     }
+}
+
+impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// returns true iff at least one of the `targets` can be reached from `start`
     /// by following parent pointers, while avoiding all eclasses in `avoid`
@@ -949,6 +963,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 }
 
 impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
+
     /// Panic if the given eclass doesn't contain the given patterns
     ///
     /// Useful for testing.
@@ -1068,12 +1083,12 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
         while !self.pending.is_empty() || !self.analysis_pending.is_empty() {
             while let Some((mut node, class)) = self.pending.pop() {
-                let old_ffn = self.farfetchedness.get(&node).map(|f| *f);
+                //let old_ffn = self.farfetchedness.get(&node).map(|f| *f);
                 node.update_children(|id| self.find_mut(id));
-                if let Some(old) = old_ffn {
-                    // record old ffn because maybe it is lower than ffn of canonicalized node
-                    self.record_ffn(node.clone(), old);
-                }
+                //if let Some(old) = old_ffn {
+                //    // record old ffn because maybe it is lower than ffn of canonicalized node
+                //    self.record_ffn(node.clone(), old);
+                //}
                 if let Some(memo_class) = self.memo.insert(node, class) {
                     // Note: This call to perform_union might add more work items to self.pending
                     let did_something = self.perform_union(
@@ -1101,6 +1116,28 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
         assert!(self.pending.is_empty());
         assert!(self.analysis_pending.is_empty());
+
+        let mut new_ffns: HashMap<L, Ffn> = HashMap::default();
+        for (oldnode, ffn) in self.farfetchedness.iter() {
+            let mut node = oldnode.clone();
+            node.update_children(|id| self.find(id));
+            let new_ffn = if let Some(existing_ffn) = new_ffns.get(&node) {
+                ffn_min(*ffn, *existing_ffn)
+            } else {
+                *ffn
+            };
+            new_ffns.insert(node, new_ffn);
+        }
+        self.farfetchedness = new_ffns;
+
+        for (oldnode, _id) in self.memo.iter() {
+            let mut node = oldnode.clone();
+            node.update_children(|id| self.find(id));
+            let offn = self.farfetchedness.get(&node);
+            println!("offn: {offn:?}");
+            assert!(offn.is_some());
+            assert!(*offn.unwrap() != 255);
+        }
 
         n_unions
     }
@@ -1171,6 +1208,10 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
         debug_assert!(self.check_memo());
         self.clean = true;
+
+        //println!("Memo: {:#?}", self.memo);
+        //println!("Ffn: {:#?}", self.farfetchedness);
+
         n_unions
     }
 

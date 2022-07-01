@@ -7,6 +7,7 @@ use std::{convert::TryFrom, str::FromStr};
 use thiserror::Error;
 
 use crate::*;
+use crate::egraph::ffn_infinity;
 
 /// A pattern that can function as either a [`Searcher`] or [`Applier`].
 ///
@@ -261,7 +262,7 @@ pub struct SearchMatches<'a, L: Language> {
     pub ast: Option<Cow<'a, PatternAst<L>>>,
 }
 
-impl<'a, L: Language /*+ std::fmt::Display for better debugging*/> SearchMatches<'a, L> {
+impl<'a, L: Language + std::fmt::Display /*for better debugging*/> SearchMatches<'a, L> {
     /// Filter the substs to contain only those that don't create too far-fetched terms,
     /// and record the far-fetchedness of each term in ffns.
     pub fn compute_and_filter_ffns<N: Analysis<L>>(
@@ -277,7 +278,8 @@ impl<'a, L: Language /*+ std::fmt::Display for better debugging*/> SearchMatches
         for subst in all_substs {
             if egraph.contains_instantiation(right_pat, &subst) {
                 self.substs.push(subst);
-                self.ffns.push(None);
+                //self.ffns.push(None);
+                self.ffns.push(Some(ffn_infinity()));
             } else {
                 let ffn = ffn_increase(searcher.ffn_of_subst(&egraph, &subst));
                 //println!("increased ffn of {} is {}", fmt_subst_to_str(egraph, &subst), ffn);

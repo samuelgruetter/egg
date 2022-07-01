@@ -508,7 +508,7 @@ where
 
 impl<L, N, IterData> Runner<L, N, IterData>
 where
-    L: Language /*+ std::fmt::Display for better debugging*/,
+    L: Language + std::fmt::Display /*for better debugging*/,
     N: Analysis<L>,
     IterData: IterationData<L, N>,
 {
@@ -657,6 +657,8 @@ where
         if can_be_saturated {
             result = result.and(Err(StopReason::Saturated))
         }
+
+        print_eclasses(&self.egraph);
 
         Iteration {
             applied,

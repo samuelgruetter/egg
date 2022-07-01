@@ -90,7 +90,9 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
     pub fn apply(&self, egraph: &mut EGraph<L, N>, matches: &[SearchMatches<L>]) -> Vec<Id> {
         self.applier.apply_matches(egraph, matches, self.name)
     }
+}
 
+impl<L: Language + Display /* for better debugging */, N: Analysis<L>> Rewrite<L, N> {
     pub fn is_new_and_loopy(
         &self, 
         subst: &Subst,
@@ -117,7 +119,9 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
             return true; // eclasses_used_by_instantiation returning None means loopy
         }
     }
+}
 
+impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
     /// This `run` is for testing use only. You should use things
     /// from the `egg::run` module
     #[cfg(test)]
