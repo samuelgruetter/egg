@@ -255,30 +255,38 @@ pub struct SearchMatches<'a, L: Language> {
     pub substs: Vec<Subst>,
     /// The farfetchedness of the new terms that this each substitution creates.
     /// Must have the same length as substs (or be empty if not computed yet).
-    pub ffns: Vec<egraph::Ffn>, 
+    /// Elements are None if the rhs term is not new. 
+    pub ffns: Vec<Option<egraph::Ffn>>, 
     /// Optionally, an ast for the matches used in proof production.
     pub ast: Option<Cow<'a, PatternAst<L>>>,
 }
 
-impl<'a, L: Language> SearchMatches<'a, L> {
+impl<'a, L: Language /*+ std::fmt::Display for better debugging*/> SearchMatches<'a, L> {
     /// Filter the substs to contain only those that don't create too far-fetched terms,
     /// and record the far-fetchedness of each term in ffns.
     pub fn compute_and_filter_ffns<N: Analysis<L>>(
         &mut self, 
         egraph: &EGraph<L, N>, 
         searcher: &std::sync::Arc<dyn Searcher<L, N> + Sync + Send>,
+        right_pat: &PatternAst<L>,
         max_ffn: Ffn
     ) -> () {
         //self.ffns.resize(self.substs.len(), 0); // <-- to disable ffn restrictions
         let all_substs = self.substs.clone();
         self.substs.clear();
         for subst in all_substs {
-            let ffn = ffn_increase(searcher.ffn_of_subst(&egraph, &subst));
-            if ffn <= max_ffn {
+            if egraph.contains_instantiation(right_pat, &subst) {
                 self.substs.push(subst);
-                self.ffns.push(ffn);
+                self.ffns.push(None);
             } else {
-                //println!("Dropping match because ffn limit was hit");
+                let ffn = ffn_increase(searcher.ffn_of_subst(&egraph, &subst));
+                //println!("increased ffn of {} is {}", fmt_subst_to_str(egraph, &subst), ffn);
+                if ffn <= max_ffn {
+                    self.substs.push(subst);
+                    self.ffns.push(Some(ffn));
+                } else {
+                    //println!("Dropping match because ffn limit was hit");
+                }
             }
         }
     }
@@ -291,6 +299,10 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
 
     fn ffn_of_subst(&self, egraph: &EGraph<L, A>, subst: &Subst) -> Ffn {
         egraph.max_ffn_of_instantiated_pattern(&self.ast, &subst)
+    }
+
+    fn eclasses_used_by_match(&self, egraph: &EGraph<L, A>, subst: &Subst) -> Option<Vec<(Id, HashSet<Id>)>> {
+        egraph.eclasses_used_by_instantiation(self.ast.as_ref(), subst).map(|p| vec![p])
     }
 
     fn search(&self, egraph: &EGraph<L, A>) -> Vec<SearchMatches<L>> {
@@ -382,7 +394,7 @@ where
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
-        ffn: egraph::Ffn,
+        ffn: Option<egraph::Ffn>,
     ) -> Vec<Id> {
         let ast = self.ast.as_ref();
         let mut id_buf = vec![0.into(); ast.len()];
@@ -413,7 +425,7 @@ pub(crate) fn apply_pat<L: Language, A: Analysis<L>>(
     pat: &[ENodeOrVar<L>],
     egraph: &mut EGraph<L, A>,
     subst: &Subst,
-    ffn: egraph::Ffn
+    ffn: Option<egraph::Ffn>
 ) -> Id {
     debug_assert_eq!(pat.len(), ids.len());
     trace!("apply_rec {:2?} {:?}", pat, subst);
@@ -450,7 +462,7 @@ mod tests {
             &"(+ z w)".parse().unwrap(),
             &Default::default(),
             "union_plus".to_string(),
-            egraph::ffn_zero(),
+            Some(egraph::ffn_zero()),
         );
         egraph.rebuild();
 

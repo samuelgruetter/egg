@@ -1,32 +1,17 @@
 use egg::*;
 
-define_language! {
-    enum SimpleLanguage {
-        Num(i32),
-        "+" = Add([Id; 2]),
-        "opp" = Neg([Id; 1]),
-        "&Z.le" = Zle([Id; 2]),
-        "&Z.lt" = Zlt([Id; 2]),
-        "&Z.modulo" = Zmodulo([Id; 2]),
-        Symbol(Symbol),
-    }
-}
-
-fn simplify<'a>(rules: Vec<Rewrite<SimpleLanguage, ()>>, s: &str, extra_s : Vec<&str>) -> (String, StopReason) {
-    env_logger::init();
-
+fn simplify<'a>(rules: Vec<Rewrite<SymbolLang, ()>>, s: &str, extra_s : Vec<&str>) -> (String, StopReason) {
     // parse the expression, the type annotation tells it which Language to use
-    let expr: RecExpr<SimpleLanguage> = s.parse().unwrap();
-    // let expr: RecExpr<SymbolLang> = s.parse().unwrap();
+    let expr: RecExpr<SymbolLang> = s.parse().unwrap();
 
-    let extra_exprs : Vec<RecExpr<SimpleLanguage>> = extra_s.iter().map(|s| { 
-        s.parse::<RecExpr<SimpleLanguage>>().unwrap()
+    let extra_exprs : Vec<RecExpr<SymbolLang>> = extra_s.iter().map(|s| { 
+        s.parse::<RecExpr<SymbolLang>>().unwrap()
     }).collect();
     let mut runner = Runner::default()
         .with_explanations_enabled()
         //.with_node_limit(50)
         //.with_iter_limit(2)
-        .with_ffn_limit(2)
+        .with_ffn_limit(6)
         .with_expr(&expr)
         .with_exprs(extra_exprs.iter().map(|x| &*x).collect())
         //.with_hook(|r| Ok(print_eclasses(&r.egraph)))
@@ -58,6 +43,36 @@ fn a_plus_b_minus_a_saturation() {
     ], "(+ (+ x y) (opp x))", vec![
     ]);
     assert_eq!(res, "y");
+    assert_eq!(std::mem::discriminant(&reason), std::mem::discriminant(&StopReason::Saturated));
+}
+
+#[test]
+fn assoc_and_comm_1() {
+    let (res, reason) = simplify(vec![
+        rewrite!("add_0_l"; "(add zero ?x)" => "?x"),
+        rewrite!("add_comm"; "(add ?a ?b)" => "(add ?b ?a)"),
+        rewrite!("add_to_left_assoc"; "(add ?a (add ?b ?c))" => "(add (add ?a ?b) ?c)"),
+        rewrite!("add_opp"; "(add ?a (neg ?a))" => "zero"),
+    ], "(add (add x1 (add x2 (neg x1))) (neg x1))", vec![
+        "zero"
+    ]);
+    assert!(res == "(add x2 (neg x1))" || res == "(add (neg x1) x2)");
+    assert_eq!(std::mem::discriminant(&reason), std::mem::discriminant(&StopReason::Saturated));
+}
+
+#[test]
+fn assoc_and_comm_2() {
+    let (res, reason) = simplify(vec![
+        rewrite!("add_0_l"; "(add zero ?x)" => "?x"),
+        rewrite!("add_comm"; "(add ?a ?b)" => "(add ?b ?a)"),
+        rewrite!("add_to_left_assoc"; "(add ?a (add ?b ?c))" => "(add (add ?a ?b) ?c)"),
+        rewrite!("add_opp"; "(add ?a (neg ?a))" => "zero"),
+        rewrite!("H"; "zero" => "zero"),
+    ], "(@eq U (add x2 (neg x1)) (add (add x1 (add x2 (neg x1))) (neg x1)))", vec![
+        "zero"
+    ]);
+    assert!(res == "(@eq U (add x2 (neg x1)) (add x2 (neg x1)))"
+         || res == "(@eq U (add (neg x1) x2) (add (neg x1) x2))");
     assert_eq!(std::mem::discriminant(&reason), std::mem::discriminant(&StopReason::Saturated));
 }
 

@@ -875,6 +875,17 @@ impl<L: Language> Explain<L> {
         self.explainfind[usize::from(node1)].next = node2;
         self.explainfind[usize::from(node1)].justification = justification;
         self.explainfind[usize::from(node1)].is_rewrite_forward = true;
+
+        /*
+        // BUG?: both call sites call `union` with surviving node being node1, but this one links node1 to 
+        // point to node2. But if explanations are really independent, it might be fine.
+
+        // node2 only becomes a pre-leader pointing to node1, and node1 will be the real leader
+        self.make_leader(node2); 
+        self.explainfind[usize::from(node2)].next = node1;
+        self.explainfind[usize::from(node2)].justification = justification;
+        self.explainfind[usize::from(node2)].is_rewrite_forward = false;
+        */
     }
 
     pub(crate) fn explain_equivalence(&mut self, left: Id, right: Id) -> Explanation<L> {

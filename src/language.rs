@@ -33,6 +33,15 @@ pub trait Language: Debug + Clone + Eq + Ord + Hash {
     /// This should only consider the operator, not the children `Id`s.
     fn matches(&self, other: &Self) -> bool;
 
+    fn opname(&self) -> Option<String> { None }
+
+    fn opname_or_else_debug(&self) -> String {
+        match self.opname() {
+            Some(s) => s,
+            None => format!("[opname of {:?} not available]", self)
+        }
+    }
+
     /// Returns the children of this e-node.
     fn children(&self) -> &[Id];
 
@@ -794,6 +803,10 @@ impl SymbolLang {
 impl Language for SymbolLang {
     fn matches(&self, other: &Self) -> bool {
         self.op == other.op && self.len() == other.len()
+    }
+
+    fn opname(&self) -> Option<String> {
+        Some(self.op.to_string())
     }
 
     fn children(&self) -> &[Id] {

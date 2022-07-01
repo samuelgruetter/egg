@@ -428,46 +428,6 @@ where
         Self { egraph, ..self }
     }
 
-    /// Run this `Runner` until it stops.
-    /// After this, the field
-    /// [`stop_reason`](Runner::stop_reason) is guaranteed to be
-    /// set.
-    pub fn run<'a, R>(mut self, rules: R) -> Self
-    where
-        R: IntoIterator<Item = &'a Rewrite<L, N>>,
-        L: 'a,
-        N: 'a,
-    {
-        self.run_nonchained(rules);
-        self
-    }
-
-    /// Like `run`, but does not consume & return self
-    pub fn run_nonchained<'a, R>(&mut self, rules: R) -> ()
-    where
-        R: IntoIterator<Item = &'a Rewrite<L, N>>,
-        L: 'a,
-        N: 'a,
-    {
-        let rules: Vec<&Rewrite<L, N>> = rules.into_iter().collect();
-        check_rules(&rules);
-        self.egraph.rebuild();
-        loop {
-            let iter = self.run_one(&rules);
-            self.iterations.push(iter);
-            let stop_reason = self.iterations.last().unwrap().stop_reason.clone();
-            // we need to check_limits after the iteration is complete to check for iter_limit
-            if let Some(stop_reason) = stop_reason.or_else(|| self.check_limits().err()) {
-                info!("Stopping: {:?}", stop_reason);
-                self.stop_reason = Some(stop_reason);
-                break;
-            }
-        }
-
-        assert!(!self.iterations.is_empty());
-        assert!(self.stop_reason.is_some());
-    }
-
     /// Enable explanations for this runner's egraph.
     /// This allows the runner to explain why two expressions are
     /// equivalent with the [`explain_equivalence`](Runner::explain_equivalence) function.
@@ -544,6 +504,56 @@ where
         }
         res
     }
+}
+
+impl<L, N, IterData> Runner<L, N, IterData>
+where
+    L: Language /*+ std::fmt::Display for better debugging*/,
+    N: Analysis<L>,
+    IterData: IterationData<L, N>,
+{
+
+    /// Run this `Runner` until it stops.
+    /// After this, the field
+    /// [`stop_reason`](Runner::stop_reason) is guaranteed to be
+    /// set.
+    pub fn run<'a, R>(mut self, rules: R) -> Self
+    where
+        R: IntoIterator<Item = &'a Rewrite<L, N>>,
+        L: 'a,
+        N: 'a,
+    {
+        self.run_nonchained(rules);
+        self
+    }
+
+    /// Like `run`, but does not consume & return self
+    pub fn run_nonchained<'a, R>(&mut self, rules: R) -> ()
+    where
+        R: IntoIterator<Item = &'a Rewrite<L, N>>,
+        L: 'a,
+        N: 'a,
+    {
+        let rules: Vec<&Rewrite<L, N>> = rules.into_iter().collect();
+        check_rules(&rules);
+        self.egraph.rebuild();
+        self.stop_reason = None;
+        self.iterations.clear();
+        loop {
+            let iter = self.run_one(&rules);
+            self.iterations.push(iter);
+            let stop_reason = self.iterations.last().unwrap().stop_reason.clone();
+            // we need to check_limits after the iteration is complete to check for iter_limit
+            if let Some(stop_reason) = stop_reason.or_else(|| self.check_limits().err()) {
+                info!("Stopping: {:?}", stop_reason);
+                self.stop_reason = Some(stop_reason);
+                break;
+            }
+        }
+
+        assert!(!self.iterations.is_empty());
+        assert!(self.stop_reason.is_some());
+    }
 
     fn run_one(&mut self, rules: &[&Rewrite<L, N>]) -> Iteration<IterData> {
         assert!(self.stop_reason.is_none());
@@ -580,12 +590,12 @@ where
             rules.iter().try_for_each(|rule| {
                 //println!("\nRule {}:", rule.name);
                 let mut ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
-                let left_pat = rule.searcher.get_pattern_ast().unwrap();
-                let right_pat = rule.applier.get_pattern_ast().unwrap();
                 for search_matches in ms.iter_mut() {
                     //let len_before = search_matches.substs.len();
-                    search_matches.compute_and_filter_ffns(&self.egraph, &rule.searcher, self.ffn_limit);
-                    search_matches.substs.retain(|s| !self.egraph.is_new_and_loopy(left_pat, right_pat, s, &initial_terms));
+                    search_matches.compute_and_filter_ffns(&self.egraph, 
+                        &rule.searcher, rule.applier.get_pattern_ast().unwrap(), self.ffn_limit);
+                    search_matches.substs.retain
+                        (|s| !rule.is_new_and_loopy(s, &self.egraph, &initial_terms));
                     //let len_after = search_matches.substs.len();
                     //if len_before == len_after {
                     //    println!("Length of matches remained {len_before}");

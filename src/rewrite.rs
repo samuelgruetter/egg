@@ -91,6 +91,33 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
         self.applier.apply_matches(egraph, matches, self.name)
     }
 
+    pub fn is_new_and_loopy(
+        &self, 
+        subst: &Subst,
+        egraph: &EGraph<L, N>,
+        initial_terms: &HashSet<Id>,
+    ) -> bool {
+        let right_pat = self.applier.get_pattern_ast().unwrap();
+        if egraph.contains_instantiation(right_pat, subst) {
+            //println!("Keeping match because not new"); 
+            return false; // not new 
+        }
+        if let Some(starting_points) = self.searcher.eclasses_used_by_match(egraph, subst) {
+            for (left_pat_root, used) in starting_points {
+                let found_valid_path = egraph.bfs_parents(left_pat_root, used, initial_terms);
+                if !found_valid_path {
+                    // println!("Dropping match because loopy (no valid path found)");
+                    return true;
+                }
+            }
+            //println!("Keeping match because valid paths found for lhs & all triggers");
+            return false;
+        } else {
+            //println!("Dropping match because loopy within the pattern");
+            return true; // eclasses_used_by_instantiation returning None means loopy
+        }
+    }
+
     /// This `run` is for testing use only. You should use things
     /// from the `egg::run` module
     #[cfg(test)]
@@ -132,6 +159,15 @@ where
 
     /// Computes the far-fetchedness of this pattern when instantiated with `subst`
     fn ffn_of_subst(&self, egraph: &EGraph<L, N>, subst: &Subst) -> Ffn;
+
+    /// Checks that the expression obtained by instantiating the pattern(s) of this searcher with
+    /// `subst` does not contain any subterm that is in the same eclass as one of its ancestors.
+    /// For normal patterns, considers the whole pattern.
+    /// For multipatterns, considers the lhs of the equality and the triggers, but ignores the
+    /// sideconditions.
+    /// Returns `Some (list of tuples (id of instantiated pattern root, set of used eclass ids))`
+    /// if the test passes, None otherwise.
+    fn eclasses_used_by_match(&self, egraph: &EGraph<L, N>, subst: &Subst) -> Option<Vec<(Id, HashSet<Id>)>>;
 
     /// Search the whole [`EGraph`], returning a list of all the
     /// [`SearchMatches`] where something was found.
@@ -322,7 +358,7 @@ where
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
-        ffn: egraph::Ffn,
+        ffn: Option<egraph::Ffn>,
     ) -> Vec<Id>;
 
     /// Returns a list of variables that this Applier assumes are bound.
@@ -373,7 +409,7 @@ where
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
-        ffn: egraph::Ffn,
+        ffn: Option<egraph::Ffn>,
     ) -> Vec<Id> {
         if self.condition.check(egraph, eclass, subst) {
             self.applier
@@ -524,7 +560,7 @@ mod tests {
             &"TRUE".parse().unwrap(),
             &Default::default(),
             "direct-union".to_string(),
-            egraph::ffn_zero(),
+            Some(egraph::ffn_zero()),
         );
 
         println!("Should fire now");
@@ -560,7 +596,7 @@ mod tests {
                 subst: &Subst,
                 searcher_ast: Option<&PatternAst<SymbolLang>>,
                 rule_name: Symbol,
-                ffn: egraph::Ffn,
+                ffn: Option<egraph::Ffn>,
             ) -> Vec<Id> {
                 let a: Var = "?a".parse().unwrap();
                 let b: Var = "?b".parse().unwrap();

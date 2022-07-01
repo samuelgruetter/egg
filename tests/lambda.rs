@@ -103,7 +103,7 @@ impl Analysis<Lambda> for LambdaAnalysis {
                     &c.1,
                     &Default::default(),
                     "analysis".to_string(),
-                    ffn_zero()
+                    Some(ffn_zero())
                 );
             } else {
                 let const_id = egraph.add(c.0);
@@ -178,7 +178,7 @@ impl Applier<Lambda, LambdaAnalysis> for CaptureAvoid {
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Lambda>>,
         rule_name: Symbol,
-        ffn: Ffn
+        ffn: Option<Ffn>
     ) -> Vec<Id> {
         let e = subst[self.e];
         let v2 = subst[self.v2];

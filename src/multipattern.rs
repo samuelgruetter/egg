@@ -138,6 +138,15 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for MultiPattern<L> {
         current_max
     }
 
+    fn eclasses_used_by_match(&self, egraph: &EGraph<L, A>, subst: &Subst) -> Option<Vec<(Id, HashSet<Id>)>> {
+        let mut res = Vec::new();
+        let triggers = self.asts.iter().filter(|(name, _pattern)| name.to_string().contains("trigger"));
+        for (_name, pattern) in triggers.chain(std::iter::once(self.asts.last().unwrap())) {
+            res.push(egraph.eclasses_used_by_instantiation(pattern.as_ref(), subst)?);
+        }
+        Some(res)
+    }
+
     fn search_eclass(&self, egraph: &EGraph<L, A>, eclass: Id) -> Option<SearchMatches<L>> {
         let substs = self.program.run(egraph, eclass);
         if substs.is_empty() {
@@ -179,7 +188,7 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
         _subst: &Subst,
         _searcher_ast: Option<&PatternAst<L>>,
         _rule_name: Symbol,
-        _ffn: egraph::Ffn,
+        _ffn: Option<egraph::Ffn>,
     ) -> Vec<Id> {
         panic!("Multipatterns do not support apply_one")
     }

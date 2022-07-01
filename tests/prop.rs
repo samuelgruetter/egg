@@ -52,7 +52,7 @@ impl Analysis<Prop> for ConstantFold {
                 &c.0.to_string().parse().unwrap(),
                 &Default::default(),
                 "analysis".to_string(),
-                ffn_zero(),
+                Some(ffn_zero()),
             );
         }
     }

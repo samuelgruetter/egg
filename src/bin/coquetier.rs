@@ -58,7 +58,7 @@ impl Rule {
                 patterns.extend(multipattern_part(&format!("?$hyp{}", i), p))
             }
             for (i, p) in self.triggers.iter().enumerate() {
-                patterns.extend(multipattern_part(&format!("?$pat{}", i), p))
+                patterns.extend(multipattern_part(&format!("?$trigger{}", i), p))
             }
             patterns.extend(multipattern_part("?$lhs", &self.conclusion_lhs));
             let searcher: MultiPattern<SymbolLang> = MultiPattern::new(patterns);
@@ -223,14 +223,25 @@ impl Server {
         println!("Saturation took {saturation_time:.3}s");
         self.runner.print_report();
         
-        let root = *self.runner.roots.last().unwrap();
+        /*
+        for len in 1..=rewrites.len() {
+            let prefix = &rewrites[..len];
+            let last_rule = prefix.last().unwrap();
+            let t = Instant::now();
+            self.runner.run_nonchained(prefix);
+            let saturation_time = t.elapsed().as_secs_f64();
+            println!("\nSaturating up to {} took {:.3}s", last_rule.name, saturation_time);
+            let ffn_limit_hit = print_max_ffn_explanation_to_writer(&mut self.runner, &mut std::io::stdout());
+            if ffn_limit_hit { break; }
+        }
+        */
         let t = Instant::now();
         print_eclasses_to_file(&self.runner.egraph, "./coq_eclasses_log.txt");
         let dump_time = t.elapsed().as_secs_f64();
         println!("Dumping the egraph took {dump_time:.3}s");
-       
 
         let extractor = Extractor::new(&self.runner.egraph, MotivateTrue);
+        let root = *self.runner.roots.last().unwrap();
         let (best_cost, best) = extractor.find_best(root);
         println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
         let mut ctor_equals = None;

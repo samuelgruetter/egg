@@ -122,7 +122,7 @@ pub struct EGraph<L: Language, N: Analysis<L>> {
     ///   all new enodes have their farfetchedness set to the farfetchedness of the
     ///   instantiated searcher (lhs) pattern plus the cost of the rule, which currently equals
     ///   1 for all rules.
-    pub farfetchedness: HashMap<Id, Ffn>,
+    pub farfetchedness: HashMap<L, Ffn>,
 }
 
 #[cfg(feature = "serde-1")]
@@ -255,11 +255,8 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     pub fn explain_equivalence(&mut self, left: &RecExpr<L>, right: &RecExpr<L>) -> Explanation<L> {
         // NOTE: explanations don't work any more if we use lookup_expr instead of add_expr_internal,
         // because then left and right are immediately considered equal
-        // let left = self.lookup_expr(left).expect("left expr not found, use add_expr before calling explain_equivalence");
-        // let right = self.lookup_expr(right).expect("right expr not found, use add_expr before calling explain_equivalence");
-        // TODO this should not require an ffn value!
-        let left = self.add_expr_internal(left, ffn_zero());
-        let right = self.add_expr_internal(right, ffn_zero());
+        let left = self.add_expr_internal(left, None);
+        let right = self.add_expr_internal(right, None);
         if let Some(explain) = &mut self.explain {
             explain.explain_equivalence(left, right)
         } else {
@@ -276,7 +273,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     /// Note that this function can be called again to explain any intermediate terms
     /// used in the output [`Explanation`].
     pub fn explain_existance(&mut self, expr: &RecExpr<L>) -> Explanation<L> {
-        let id = self.lookup_expr(expr).expect("expr not found, use add_expr before calling explain_existance");
+        let id = self.add_expr_internal(expr, None);
         if let Some(explain) = &mut self.explain {
             explain.explain_existance(id)
         } else {
@@ -287,37 +284,31 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     /// Return an [`Explanation`] for why a pattern appears in the egraph.
     pub fn explain_existance_pattern(
         &mut self,
-        _pattern: &PatternAst<L>,
-        _subst: &Subst,
+        pattern: &PatternAst<L>,
+        subst: &Subst,
     ) -> Explanation<L> {
-        panic!("This query is disabled at the moment because we don't want to alter farfetchedness levels");
-        /*
-        let id = self.add_instantiation_internal(pattern, subst);
+        let id = self.add_instantiation_internal(pattern, subst, None);
         if let Some(explain) = &mut self.explain {
             explain.explain_existance(id)
         } else {
             panic!("Use runner.with_explanations_enabled() or egraph.with_explanations_enabled() before running to get explanations.")
         }
-        */
     }
 
     /// Get an explanation for why an expression matches a pattern.
     pub fn explain_matches(
         &mut self,
-        _left: &RecExpr<L>,
-        _right: &PatternAst<L>,
-        _subst: &Subst,
+        left: &RecExpr<L>,
+        right: &PatternAst<L>,
+        subst: &Subst,
     ) -> Explanation<L> {
-        panic!("This query is disabled at the moment because we don't want to alter farfetchedness levels");
-        /*
-        let left = self.add_expr_internal(left);
-        let right = self.add_instantiation_internal(right, subst);
+        let left = self.add_expr_internal(left, None);
+        let right = self.add_instantiation_internal(right, subst, None);
         if let Some(explain) = &mut self.explain {
             explain.explain_equivalence(left, right)
         } else {
             panic!("Use runner.with_explanations_enabled() or egraph.with_explanations_enabled() before running to get explanations.");
         }
-        */
     }
 
     /// Canonicalizes an eclass id.
@@ -396,12 +387,12 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     ///
     /// [`add_expr`]: EGraph::add_expr()
     pub fn add_expr(&mut self, expr: &RecExpr<L>) -> Id {
-        let id = self.add_expr_internal(expr, ffn_zero());
+        let id = self.add_expr_internal(expr, Some(ffn_zero()));
         self.find(id)
     }
 
     /// Adds an expr to the egraph, and returns the uncanonicalized id of the top enode.
-    fn add_expr_internal(&mut self, expr: &RecExpr<L>, ffn: Ffn) -> Id {
+    fn add_expr_internal(&mut self, expr: &RecExpr<L>, ffn: Option<Ffn>) -> Id {
         let nodes = expr.as_ref();
         let mut new_ids = Vec::with_capacity(nodes.len());
         let mut new_node_q = Vec::with_capacity(nodes.len());
@@ -429,12 +420,12 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// Adds a [`Pattern`] and a substitution to the [`EGraph`], returning
     /// the eclass of the instantiated pattern.
-    pub fn add_instantiation(&mut self, pat: &PatternAst<L>, subst: &Subst, ffn: Ffn) -> Id {
+    pub fn add_instantiation(&mut self, pat: &PatternAst<L>, subst: &Subst, ffn: Option<Ffn>) -> Id {
         let id = self.add_instantiation_internal(pat, subst, ffn);
         self.find(id)
     }
 
-    fn add_instantiation_internal(&mut self, pat: &PatternAst<L>, subst: &Subst, ffn: Ffn) -> Id {
+    fn add_instantiation_internal(&mut self, pat: &PatternAst<L>, subst: &Subst, ffn: Option<Ffn>) -> Id {
         let nodes = pat.as_ref();
         let mut new_ids = Vec::with_capacity(nodes.len());
         let mut new_node_q = Vec::with_capacity(nodes.len());
@@ -510,6 +501,10 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         self.memo.get(enode).copied()
     }
 
+    pub fn lookup_noncanonical(&self, enode: &L) -> Option<Id> {
+        self.lookup_internal(enode.clone())
+    }
+
     /// Lookup the eclass of the given [`RecExpr`].
     ///
     /// Equivalent to the last value in [`EGraph::lookup_expr_ids`].
@@ -543,25 +538,36 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     ///
     /// [`add`]: EGraph::add()
     pub fn add(&mut self, enode: L) -> Id {
-        self.add_with_farfetchedness(enode, ffn_zero())
+        self.add_with_farfetchedness(enode, Some(ffn_zero()))
     }
 
     #[allow(missing_docs)]
-    pub fn add_with_farfetchedness(&mut self, enode: L, ffn: Ffn) -> Id {
+    pub fn add_with_farfetchedness(&mut self, enode: L, ffn: Option<Ffn>) -> Id {
         let id = self.add_internal(enode, ffn);
         self.find(id)
     }
 
+    fn record_ffn(&mut self, enode: L, new_ffn: Ffn) -> () {
+        let lowest_ffn = match self.farfetchedness.get(&enode) {
+            Some(existing) => ffn_min(*existing, new_ffn),
+            None => new_ffn
+        };
+        self.farfetchedness.insert(enode.clone(), lowest_ffn);
+    }
+
     /// Adds an enode to the egraph and also returns the the enode's id (uncanonicalized).
-    fn add_internal(&mut self, enode: L, ffn: Ffn) -> Id {
-        let id = self.add_internal_without_ffn(enode);
-        if let Some(ffn_ptr) = self.farfetchedness.get_mut(&id) {
-            *ffn_ptr = ffn_min(ffn, *ffn_ptr);
-        } else {
-            //println!("Enode {id} has far-fetched-ness {ffn}");
-            self.farfetchedness.insert(id, ffn);
+    /// Passing in None for the ffn is only allowed if the enode is already present.
+    /// (but we can't really enforce this with an assert here because add_internal_without_ffn
+    /// might create new nested enodes for explanation purposes even though the enode already exists).
+    /// If `Some` is passed for ffn, and the enode already exists, the minimum is used.
+    /// If `None` is passed for ffn, we rely on the rebuild phase to propagate the ffn from the
+    /// already-existing node to the added node.
+    fn add_internal(&mut self, enode: L, new_ffn: Option<Ffn>) -> Id {
+        match new_ffn {
+            Some(new) => { self.record_ffn(enode.clone(), new); } 
+            None => {}
         }
-        id
+        self.add_internal_without_ffn(enode)
     }
 
     /// Adds an enode to the egraph and also returns the the enode's id (uncanonicalized).
@@ -649,20 +655,16 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     }
 
     /// Returns the far-fetched-ness of an enode
+    /// Only works on a clean egraph (ie no modifications after the last rebuild)
     pub fn ffn_of_enode(&self, enode: &L) -> Option<&Ffn> {
-        if let Some(id) = self.lookup_internal(enode.clone()) {
-            self.farfetchedness.get(&id)
-        } else {
-            None
-        }
+        self.farfetchedness.get(enode)
     }
 
     fn min_ffn_of_class(&self, eclass_id: Id) -> Ffn {
         let mut current_min = ffn_infinity();
         if let Some(eclass) = self.classes.get(&eclass_id) {
             for enode in eclass.nodes.iter() {
-                let enode_id = self.memo.get(enode).unwrap();
-                current_min = ffn_min(current_min, *self.farfetchedness.get(enode_id).unwrap());
+                current_min = ffn_min(current_min, *self.farfetchedness.get(enode).unwrap());
             }
         } else {
             panic!("eclass_id {} not found", eclass_id);
@@ -680,18 +682,19 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         for node in nodes {
             match node {
                 ENodeOrVar::Var(var) => {
-                    let id_0 = subst[*var];
-                    let id = self.find(id_0);
-                    // This seems to happen indeed *if* we run this function on a dirty (ie non-rebuilt) egraph:
-                    // if id_0 != id { println!("Note: id {id_0} in subst was not canonical, its canonical id is {id}"); }
+                    let id = subst[*var];
                     instantiated_ids.push(id);
-                    current_max = ffn_max(current_max, self.min_ffn_of_class(id));
+                    let ffn = self.min_ffn_of_class(id);
+                    // println!("  ffn of var {}, instantiated to {}, is {}", var, id, ffn);
+                    current_max = ffn_max(current_max, ffn);
                 }
                 ENodeOrVar::ENode(node) => {
                     let instantiated_node = node.clone().map_children(|i| instantiated_ids[usize::from(i)]);
+                    let ffn = *self.farfetchedness.get(&instantiated_node).unwrap();
                     let id_noncanonical = self.lookup_internal(instantiated_node).unwrap();
                     instantiated_ids.push(self.find(id_noncanonical));
-                    current_max = ffn_max(current_max, *self.farfetchedness.get(&id_noncanonical).unwrap());
+                    // println!("  ffn of node {:?} is {}", node, ffn);
+                    current_max = ffn_max(current_max, ffn);
                 }
             }
         }
@@ -712,7 +715,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         to_pat: &PatternAst<L>,
         subst: &Subst,
         rule_name: impl Into<Symbol>,
-        ffn: Ffn
+        ffn: Option<Ffn>
     ) -> (Id, bool) {
         let id1 = self.add_instantiation_internal(from_pat, subst, ffn); // TODO why is this not just a lookup?
         let size_before = self.unionfind.size();
@@ -858,7 +861,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     /// if the test passes, None otherwise.
     /// The HashSets are mutable, but each function only mutates the one set that it
     /// creates and returns.
-    fn eclasses_used_by_instantiation(
+    pub fn eclasses_used_by_instantiation(
         &self,
         pat: &[ENodeOrVar<L>], 
         subst: &Subst, 
@@ -905,33 +908,6 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
                 used.insert(eid);
                 Some((eid, used))
             }
-        }
-    }
-
-    // TODO: check not only left_pat (aka lhs of rewrite), but also the triggers 
-    // (but not the sideconditions, because these could be ands that are very likely to be loopy)
-    pub fn is_new_and_loopy(
-        &self, 
-        left_pat: &PatternAst<L>, 
-        right_pat: &PatternAst<L>,
-        subst: &Subst,
-        initial_terms: &HashSet<Id>,
-    ) -> bool {
-        if self.contains_instantiation(right_pat, subst) {
-            //println!("Keeping match because not new"); 
-            return false; /* not new */ 
-        }
-        if let Some((left_pat_root, used)) = self.eclasses_used_by_instantiation(left_pat.as_ref(), subst) {
-            let found_valid_path = self.bfs_parents(left_pat_root, used, initial_terms);
-            //if found_valid_path {
-            //    println!("Keeping match because valid path found");
-            //} else {
-            //    println!("Dropping match because loopy (no valid path found)");
-            //}
-            !found_valid_path
-        } else {
-            //println!("Dropping match because loopy within the pattern");
-            true // eclasses_used_by_instantiation returning None means loopy
         }
     }
 
@@ -1092,8 +1068,14 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
         while !self.pending.is_empty() || !self.analysis_pending.is_empty() {
             while let Some((mut node, class)) = self.pending.pop() {
+                let old_ffn = self.farfetchedness.get(&node).map(|f| *f);
                 node.update_children(|id| self.find_mut(id));
+                if let Some(old) = old_ffn {
+                    // record old ffn because maybe it is lower than ffn of canonicalized node
+                    self.record_ffn(node.clone(), old);
+                }
                 if let Some(memo_class) = self.memo.insert(node, class) {
+                    // Note: This call to perform_union might add more work items to self.pending
                     let did_something = self.perform_union(
                         memo_class,
                         class,
@@ -1238,7 +1220,7 @@ mod tests {
             &"y".parse().unwrap(),
             &Default::default(),
             "union x and y".to_string(),
-            ffn_zero()
+            Some(ffn_zero())
         );
         egraph.rebuild();
     }

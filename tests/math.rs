@@ -99,7 +99,7 @@ impl Analysis<Math> for ConstantFold {
                     &format!("{}", c).parse().unwrap(),
                     &Default::default(),
                     "constant_fold".to_string(),
-                    ffn_zero(),
+                    Some(ffn_zero()),
                 );
             } else {
                 let added = egraph.add(Math::Constant(c));
