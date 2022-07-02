@@ -657,7 +657,7 @@ where
             result = result.and(Err(StopReason::Saturated))
         }
 
-        print_eclasses(&self.egraph);
+        // print_eclasses(&self.egraph);
 
         Iteration {
             applied,

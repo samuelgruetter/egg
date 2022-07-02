@@ -433,7 +433,7 @@ impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
     }
 
     fn add_instantiation_internal(&mut self, pat: &PatternAst<L>, subst: &Subst, ffn: Option<Ffn>) -> Id {
-        println!("add_instantiation_internal({}, {}, {:?})", pat, fmt_subst_to_str(self, &subst), ffn);
+        //println!("add_instantiation_internal({}, {}, {:?})", pat, fmt_subst_to_str(self, &subst), ffn);
 
         let nodes = pat.as_ref();
         let mut new_ids = Vec::with_capacity(nodes.len());
@@ -877,8 +877,8 @@ impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
                 }
             }
         }
-        let top = *instantiated_ids.last().unwrap();
-        println!("contains_instantiation({}, {}) true for {}", pat, fmt_subst_to_str(self, &subst), top);
+        //let top = *instantiated_ids.last().unwrap();
+        //println!("contains_instantiation({}, {}) true for {}", pat, fmt_subst_to_str(self, &subst), top);
         true
     }
 }

@@ -292,7 +292,6 @@ impl<'a, L: Language + std::fmt::Display /*for better debugging*/> SearchMatches
                 }
             }
         }
-        println!("substs/ffn lengths in compute_and_filter: {}, {}", self.substs.len(), self.ffns.len());
         assert!(self.substs.len() == self.ffns.len());
     }
 
@@ -390,7 +389,6 @@ where
         let mut id_buf = vec![0.into(); ast.len()];
         for mat in matches {
             let sast = mat.ast.as_ref().map(|cow| cow.as_ref());
-            println!("lens:: {}, {}", mat.substs.len(), mat.ffns.len());
             assert!(mat.substs.len() == mat.ffns.len());
             for (subst, ffn) in mat.substs.iter().zip(mat.ffns.iter()) {
                 let did_something;
