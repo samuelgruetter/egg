@@ -434,6 +434,7 @@ impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
 
     fn add_instantiation_internal(&mut self, pat: &PatternAst<L>, subst: &Subst, ffn: Option<Ffn>) -> Id {
         //println!("add_instantiation_internal({}, {}, {:?})", pat, fmt_subst_to_str(self, &subst), ffn);
+        //let mut last_new_node: Option<L> = None;
 
         let nodes = pat.as_ref();
         let mut new_ids = Vec::with_capacity(nodes.len());
@@ -447,6 +448,7 @@ impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
                 }
                 ENodeOrVar::ENode(node) => {
                     let new_node = node.clone().map_children(|i| new_ids[usize::from(i)]);
+                    //last_new_node = Some(new_node.clone());
                     let size_before = self.unionfind.size();
                     let next_id = self.add_internal(new_node, ffn);
                     if self.unionfind.size() > size_before {
@@ -466,6 +468,9 @@ impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
                 }
             }
         }
+        //if let Some(n) = last_new_node {
+        //    println!("  added {}", enode_to_string(&Extractor::new(self, AstSize), &n));
+        //}
         *new_ids.last().unwrap()
     }
 }

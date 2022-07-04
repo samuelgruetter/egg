@@ -240,6 +240,8 @@ impl Server {
         let dump_time = t.elapsed().as_secs_f64();
         println!("Dumping the egraph took {dump_time:.3}s");
 
+        let _ffn_limit_hit = print_max_ffn_explanation_to_writer(&mut self.runner, &mut std::io::stdout());
+
         let extractor = Extractor::new(&self.runner.egraph, MotivateTrue);
         let root = *self.runner.roots.last().unwrap();
         let (best_cost, best) = extractor.find_best(root);

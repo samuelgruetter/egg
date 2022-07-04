@@ -11,7 +11,7 @@ fn simplify<'a>(rules: Vec<Rewrite<SymbolLang, ()>>, s: &str, extra_s : Vec<&str
         .with_explanations_enabled()
         //.with_node_limit(50)
         //.with_iter_limit(2)
-        .with_ffn_limit(6)
+        .with_ffn_limit(7)
         .with_expr(&expr)
         .with_exprs(extra_exprs.iter().map(|x| &*x).collect())
         //.with_hook(|r| Ok(print_eclasses(&r.egraph)))
@@ -24,6 +24,7 @@ fn simplify<'a>(rules: Vec<Rewrite<SymbolLang, ()>>, s: &str, extra_s : Vec<&str
     let (best_cost, best) = extractor.find_best(root);
     
     print_eclasses(&runner.egraph);
+    runner.print_report();
 
     let best_str: String = format!("{best}");
     println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best_str.to_string(), best_cost);
@@ -54,9 +55,9 @@ fn assoc_and_comm_1() {
         rewrite!("add_to_left_assoc"; "(add ?a (add ?b ?c))" => "(add (add ?a ?b) ?c)"),
         rewrite!("add_opp"; "(add ?a (neg ?a))" => "zero"),
     ], "(add (add x1 (add x2 (neg x1))) (neg x1))", vec![
-        "zero"
+        //"zero"
     ]);
-    assert!(res == "(add x2 (neg x1))" || res == "(add (neg x1) x2)");
+    assert!(res == "(add x2 (neg x1))" || res == "(add x2 (neg x1))");
     assert_eq!(std::mem::discriminant(&reason), std::mem::discriminant(&StopReason::Saturated));
 }
 
