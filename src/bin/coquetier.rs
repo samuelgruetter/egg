@@ -62,11 +62,11 @@ impl Rule {
             }
             patterns.extend(multipattern_part("?$lhs", &self.conclusion_lhs));
             let searcher: MultiPattern<SymbolLang> = MultiPattern::new(patterns);
-            println!("{}: {} => {}", self.rulename, searcher, applier);
+            //LOG println!("{}: {} => {}", self.rulename, searcher, applier);
             Rewrite::new(self.rulename.clone(), searcher, applier).unwrap()
         } else {
             let searcher: Pattern<SymbolLang> = self.conclusion_lhs.to_string().parse::<Pattern<SymbolLang>>().unwrap();
-            println!("{}: {} => {}", self.rulename, searcher, applier);
+            //LOG println!("{}: {} => {}", self.rulename, searcher, applier);
             Rewrite::new(self.rulename.clone(), searcher, applier).unwrap()
         }
     }
@@ -235,12 +235,12 @@ impl Server {
             if ffn_limit_hit { break; }
         }
         */
-        let t = Instant::now();
+        //let t = Instant::now();
         print_eclasses_to_file(&self.runner.egraph, "./coq_eclasses_log.txt");
-        let dump_time = t.elapsed().as_secs_f64();
-        println!("Dumping the egraph took {dump_time:.3}s");
+        //let dump_time = t.elapsed().as_secs_f64();
+        //println!("Dumping the egraph took {dump_time:.3}s");
 
-        let _ffn_limit_hit = print_max_ffn_explanation_to_writer(&mut self.runner, &mut std::io::stdout());
+        //let _ffn_limit_hit = print_max_ffn_explanation_to_writer(&mut self.runner, &mut std::io::stdout());
 
         let extractor = Extractor::new(&self.runner.egraph, MotivateTrue);
         let root = *self.runner.roots.last().unwrap();

@@ -282,18 +282,18 @@ impl<'a, L: Language + std::fmt::Display /*for better debugging*/> SearchMatches
                 // ffn, so that it can be min-ed with any potentially already existing, potentially lower ffn
                 new_substs.push(subst.clone());
                 new_ffns.push(Some(ffn));
-                println!("ffn ok ({}), subst: {}", ffn, fmt_subst_to_str(egraph, &subst));
+                //LOG println!("ffn ok ({}), subst: {}", ffn, fmt_subst_to_str(egraph, &subst));
             } else {
                 // ffn is too high to add a new term, but if the term is already present, we can
                 // still do the union
                 if egraph.contains_instantiation(right_pat, &subst) {
                     new_substs.push(subst.clone());
                     new_ffns.push(Some(ffn_infinity())); // infinity as debug marker, later min gets rid of it
-                    println!("ffn too big, but term resulting from {} is already present, so we can use this match", 
-                        fmt_subst_to_str(egraph, &subst));
+                    //LOG println!("ffn too big, but term resulting from {} is already present, so we can use this match", 
+                    //LOG    fmt_subst_to_str(egraph, &subst));
                 } else {
-                    println!("ffn too big, and term resulting from {} is not yet present, so we ignore this match", 
-                        fmt_subst_to_str(egraph, &subst));
+                    //LOG println!("ffn too big, and term resulting from {} is not yet present, so we ignore this match", 
+                    //LOG     fmt_subst_to_str(egraph, &subst));
                 }
             }
         }

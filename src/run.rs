@@ -581,7 +581,7 @@ where
 
         let i = self.iterations.len();
         trace!("EGraph {:?}", self.egraph.dump());
-        print_eclasses(&self.egraph);
+        //LOG print_eclasses(&self.egraph);
 
         let start_time = Instant::now();
 
@@ -589,7 +589,7 @@ where
         let mut matches = Vec::new();
         result = result.and_then(|_| {
             rules.iter().try_for_each(|rule| {
-                println!("\nRule {}:", rule.name);
+                //LOG println!("\nRule {}:", rule.name);
                 let mut ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
                 for search_matches in ms.iter_mut() {
                     //let len_before = search_matches.substs.len();
@@ -616,7 +616,7 @@ where
         let mut applied = IndexMap::default();
         result = result.and_then(|_| {
             rules.iter().zip(matches).try_for_each(|(rw, ms)| {
-                println!("\nApplying {}", rw.name);
+                //LOG println!("\nApplying {}", rw.name);
                 let total_matches: usize = ms.iter().map(|m| m.substs.len()).sum();
                 debug!("Applying {} {} times", rw.name, total_matches);
 
