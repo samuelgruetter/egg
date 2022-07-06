@@ -1,6 +1,6 @@
 use egg::*;
 
-fn simplify<'a>(rules: Vec<Rewrite<SymbolLang, ()>>, s: &str, extra_s : Vec<&str>) -> (String, StopReason) {
+fn simplify<'a>(rules: Vec<Rewrite<SymbolLang, ()>>, s: &str, extra_s : Vec<&str>, ffn_limit: Ffn) -> (String, StopReason) {
     // parse the expression, the type annotation tells it which Language to use
     let expr: RecExpr<SymbolLang> = s.parse().unwrap();
 
@@ -11,7 +11,7 @@ fn simplify<'a>(rules: Vec<Rewrite<SymbolLang, ()>>, s: &str, extra_s : Vec<&str
         .with_explanations_enabled()
         //.with_node_limit(50)
         //.with_iter_limit(2)
-        .with_ffn_limit(7)
+        .with_ffn_limit(ffn_limit)
         .with_expr(&expr)
         .with_exprs(extra_exprs.iter().map(|x| &*x).collect())
         //.with_hook(|r| Ok(print_eclasses(&r.egraph)))
@@ -42,7 +42,7 @@ fn a_plus_b_minus_a_saturation() {
         rewrite!("add_to_left_assoc"; "(+ ?a (+ ?b ?c))" => "(+ (+ ?a ?b) ?c)"),
         rewrite!("add_to_right_assoc"; "(+ (+ ?a ?b) ?c)" => "(+ ?a (+ ?b ?c))"),
     ], "(+ (+ x y) (opp x))", vec![
-    ]);
+    ], 3);
     assert_eq!(res, "y");
     assert_eq!(std::mem::discriminant(&reason), std::mem::discriminant(&StopReason::Saturated));
 }
@@ -56,7 +56,7 @@ fn assoc_and_comm_1() {
         rewrite!("add_opp"; "(add ?a (neg ?a))" => "zero"),
     ], "(add (add x1 (add x2 (neg x1))) (neg x1))", vec![
         //"zero"
-    ]);
+    ], 3);
     assert!(res == "(add x2 (neg x1))" || res == "(add x2 (neg x1))");
     assert_eq!(std::mem::discriminant(&reason), std::mem::discriminant(&StopReason::Saturated));
 }
@@ -71,7 +71,7 @@ fn assoc_and_comm_2() {
         rewrite!("H"; "zero" => "zero"),
     ], "(@eq U (add x2 (neg x1)) (add (add x1 (add x2 (neg x1))) (neg x1)))", vec![
         "zero"
-    ]);
+    ], 3);
     assert!(res == "(@eq U (add x2 (neg x1)) (add x2 (neg x1)))"
          || res == "(@eq U (add (neg x1) x2) (add (neg x1) x2))");
     assert_eq!(std::mem::discriminant(&reason), std::mem::discriminant(&StopReason::Saturated));
@@ -89,7 +89,22 @@ fn multipattern_ffn_needs_to_consider_all_patterns() {
         "(&Z.le &0 va)",
         "(&Z.lt &0 vm)",
         "(&Z.lt va vb)",
-    ]);
+    ], 3);
+    assert_eq!(res, "&True");
+    assert_eq!(std::mem::discriminant(&reason), std::mem::discriminant(&StopReason::Saturated));
+}
+
+#[test]
+fn multipattern_should_not_modify_sidecond_ffn() {
+    // TODO actually test that multipatterns don't set the ffn of sideconditions
+    // (needed because ffn computation does not take into account ffns of sideconditions)
+    let (res, reason) = simplify(vec![
+        coq_rewrite!("lt_S"; "?$hyp0 = &True = (is_nat ?x), ?$lhs = &True" => "(lt ?x (S ?x))"),
+        coq_rewrite!("typecheck_S"; "?$hyp1 = &True = (is_nat ?y), ?$lhs = &True" => "(is_nat (S ?y))"),
+        rewrite!("typecheck_O"; "(is_nat O)" => "&True"),
+    ], "(lt (S (S O)) (S (S (S O))))", vec![
+        "(is_nat O)", "&True"
+    ], 4);
     assert_eq!(res, "&True");
     assert_eq!(std::mem::discriminant(&reason), std::mem::discriminant(&StopReason::Saturated));
 }
