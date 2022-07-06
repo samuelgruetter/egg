@@ -247,6 +247,7 @@ pub struct Report {
     pub rebuilds: usize,
     pub total_time: f64,
     pub search_time: f64,
+    pub filter_time: f64,
     pub apply_time: f64,
     pub rebuild_time: f64,
 }
@@ -262,6 +263,7 @@ impl std::fmt::Display for Report {
         writeln!(f, "  Rebuilds: {}", self.rebuilds)?;
         writeln!(f, "  Total time: {}", self.total_time)?;
         writeln!(f, "    Search:  ({:.2}) {}", self.search_time / self.total_time, self.search_time)?;
+        writeln!(f, "    Filter:  ({:.2}) {}", self.filter_time / self.total_time, self.filter_time)?;
         writeln!(f, "    Apply:   ({:.2}) {}", self.apply_time / self.total_time, self.apply_time)?;
         writeln!(f, "    Rebuild: ({:.2}) {}", self.rebuild_time / self.total_time, self.rebuild_time)?;
         Ok(())
@@ -292,6 +294,8 @@ pub struct Iteration<IterData> {
     pub hook_time: f64,
     /// Seconds spent searching in this iteration.
     pub search_time: f64,
+    /// Seconds spent filering in this iteration.
+    pub filter_time: f64,
     /// Seconds spent applying rules in this iteration.
     pub apply_time: f64,
     /// Seconds spent [`rebuild`](EGraph::rebuild())ing
@@ -491,6 +495,7 @@ where
             memo_size: self.egraph.total_size(),
             rebuilds: self.iterations.iter().map(|i| i.n_rebuilds).sum(),
             search_time: self.iterations.iter().map(|i| i.search_time).sum(),
+            filter_time: self.iterations.iter().map(|i| i.filter_time).sum(),
             apply_time: self.iterations.iter().map(|i| i.apply_time).sum(),
             rebuild_time: self.iterations.iter().map(|i| i.rebuild_time).sum(),
             total_time: self.iterations.iter().map(|i| i.total_time).sum(),
@@ -585,12 +590,24 @@ where
 
         let start_time = Instant::now();
 
-        //let initial_terms = self.canonical_roots();
         let mut matches = Vec::new();
         result = result.and_then(|_| {
             rules.iter().try_for_each(|rule| {
-                //LOG println!("\nRule {}:", rule.name);
-                let mut ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
+                let ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
+                matches.push(ms);
+                self.check_limits()
+            })
+        });
+
+        let search_time = start_time.elapsed().as_secs_f64();
+        info!("Search time: {}", search_time);
+
+        let filter_start_time = Instant::now();
+        //let initial_terms = self.canonical_roots();
+        result = result.and_then(|_| {
+            assert!(rules.len() == matches.len());
+            rules.iter().zip(matches.iter_mut()).try_for_each(|(rule, ms)| {
+                //println!("\nRule {}:", rule.name);
                 for search_matches in ms.iter_mut() {
                     //let len_before = search_matches.substs.len();
                     search_matches.compute_and_filter_ffns(&self.egraph, 
@@ -603,13 +620,12 @@ where
                     //    println!("Length of matches shrank from {len_before} to {len_after}");
                     //}
                 }
-                matches.push(ms);
                 self.check_limits()
             })
         });
 
-        let search_time = start_time.elapsed().as_secs_f64();
-        info!("Search time: {}", search_time);
+        let filter_time = filter_start_time.elapsed().as_secs_f64();
+        info!("Filter time: {}", filter_time);
 
         let apply_time = Instant::now();
 
@@ -667,6 +683,7 @@ where
             egraph_classes,
             hook_time,
             search_time,
+            filter_time,
             apply_time,
             rebuild_time,
             n_rebuilds,
