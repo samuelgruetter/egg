@@ -497,7 +497,7 @@ where
         }
     }
 
-    fn canonical_roots(&self) -> HashSet<Id> {
+    pub fn canonical_roots(&self) -> HashSet<Id> {
         let mut res = HashSet::default();
         for e in self.roots.iter() {
             res.insert(self.egraph.find(*e));
@@ -581,20 +581,21 @@ where
 
         let i = self.iterations.len();
         trace!("EGraph {:?}", self.egraph.dump());
+        print_eclasses(&self.egraph);
 
         let start_time = Instant::now();
 
-        let initial_terms = self.canonical_roots();
+        //let initial_terms = self.canonical_roots();
         let mut matches = Vec::new();
         result = result.and_then(|_| {
             rules.iter().try_for_each(|rule| {
-                //println!("\nRule {}:", rule.name);
+                println!("\nRule {}:", rule.name);
                 let mut ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
                 for search_matches in ms.iter_mut() {
                     //let len_before = search_matches.substs.len();
                     search_matches.compute_and_filter_ffns(&self.egraph, 
                         &rule.searcher, rule.applier.get_pattern_ast().unwrap(), self.ffn_limit);
-                    search_matches.remove_loopy(&self.egraph, rule, &initial_terms);
+                    //search_matches.remove_loopy(&self.egraph, rule, &initial_terms);
                     //let len_after = search_matches.substs.len();
                     //if len_before == len_after {
                     //    println!("Length of matches remained {len_before}");
@@ -615,7 +616,7 @@ where
         let mut applied = IndexMap::default();
         result = result.and_then(|_| {
             rules.iter().zip(matches).try_for_each(|(rw, ms)| {
-                //println!("\nApplying {}", rw.name);
+                println!("\nApplying {}", rw.name);
                 let total_matches: usize = ms.iter().map(|m| m.substs.len()).sum();
                 debug!("Applying {} {} times", rw.name, total_matches);
 

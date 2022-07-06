@@ -433,7 +433,7 @@ impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
     }
 
     fn add_instantiation_internal(&mut self, pat: &PatternAst<L>, subst: &Subst, ffn: Option<Ffn>) -> Id {
-        //println!("add_instantiation_internal({}, {}, {:?})", pat, fmt_subst_to_str(self, &subst), ffn);
+        println!("add_instantiation_internal({}, {}, {:?})", pat, fmt_subst_to_str(self, &subst), ffn);
         //let mut last_new_node: Option<L> = None;
 
         let nodes = pat.as_ref();

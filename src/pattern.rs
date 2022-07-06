@@ -272,26 +272,33 @@ impl<'a, L: Language + std::fmt::Display /*for better debugging*/> SearchMatches
         right_pat: &PatternAst<L>,
         max_ffn: Ffn
     ) -> () {
-        //self.ffns.resize(self.substs.len(), 0); // <-- to disable ffn restrictions
-        let all_substs = self.substs.clone();
-        self.substs.clear();
-        assert!(self.ffns.len() == 0);
-        for subst in all_substs {
-            if egraph.contains_instantiation(right_pat, &subst) {
-                self.substs.push(subst);
-                //self.ffns.push(None);
-                self.ffns.push(Some(ffn_infinity()));
+        //self.ffns.resize(self.substs.len(), Some(ffn_zero())); // <-- to disable ffn restrictions
+        let mut new_substs: Vec<Subst> = vec![];
+        let mut new_ffns: Vec<Option<Ffn>> = vec![];
+        for subst in self.substs.iter() {
+            let ffn = ffn_increase(searcher.ffn_of_subst(&egraph, &subst));
+            if ffn <= max_ffn {
+                // no matter whether the instantiation is already present or not, we record the
+                // ffn, so that it can be min-ed with any potentially already existing, potentially lower ffn
+                new_substs.push(subst.clone());
+                new_ffns.push(Some(ffn));
+                println!("ffn ok ({}), subst: {}", ffn, fmt_subst_to_str(egraph, &subst));
             } else {
-                let ffn = ffn_increase(searcher.ffn_of_subst(&egraph, &subst));
-                //println!("increased ffn of {} is {}", fmt_subst_to_str(egraph, &subst), ffn);
-                if ffn <= max_ffn {
-                    self.substs.push(subst);
-                    self.ffns.push(Some(ffn));
+                // ffn is too high to add a new term, but if the term is already present, we can
+                // still do the union
+                if egraph.contains_instantiation(right_pat, &subst) {
+                    new_substs.push(subst.clone());
+                    new_ffns.push(Some(ffn_infinity())); // infinity as debug marker, later min gets rid of it
+                    println!("ffn too big, but term resulting from {} is already present, so we can use this match", 
+                        fmt_subst_to_str(egraph, &subst));
                 } else {
-                    //println!("Dropping match because ffn limit was hit");
+                    println!("ffn too big, and term resulting from {} is not yet present, so we ignore this match", 
+                        fmt_subst_to_str(egraph, &subst));
                 }
             }
         }
+        self.substs = new_substs;
+        self.ffns = new_ffns;
         assert!(self.substs.len() == self.ffns.len());
     }
 
